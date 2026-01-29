@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <style>
+      .bg { fill: #000000; }
+      .icon { fill: #ffffff; }
+      .detail { fill: none; stroke: #ffffff; stroke-width: 1.5; stroke-linecap: round; }
+    </style>
+  </defs>
+  
+  <!-- Background circle -->
+  <circle class="bg" cx="32" cy="32" r="32"/>
+  
+  <!-- Cornucopia (Horn of Plenty - Plutus's symbol) -->
+  <path class="icon" d="M 18 38 Q 18 32, 22 28 Q 26 24, 30 24 L 30 20 Q 30 16, 32 16 Q 34 16, 34 20 L 34 24 Q 38 24, 42 28 Q 46 32, 46 38 L 44 42 Q 42 46, 38 46 L 24 46 Q 20 46, 18 42 Z"/>
+  
+  <!-- Coins flowing out (wealth) -->
+  <circle class="icon" cx="26" cy="34" r="3"/>
+  <circle class="icon" cx="32" cy="32" r="2.5"/>
+  <circle class="icon" cx="38" cy="34" r="3"/>
+  <circle class="icon" cx="30" cy="38" r="2.5"/>
+  <circle class="icon" cx="36" cy="38" r="2"/>
+  
+  <!-- Greek laurel crown above -->
+  <path class="detail" d="M 24 14 Q 28 12, 32 12 Q 36 12, 40 14"/>
+  <path class="detail" d="M 26 14 L 25 16 M 30 13 L 29 15 M 34 13 L 35 15 M 38 14 L 39 16"/>
+  
+  <!-- Dollar/wealth symbols -->
+  <text x="28" y="36" font-family="Arial" font-size="6" font-weight="bold" class="icon">$</text>
+  <text x="34" y="40" font-family="Arial" font-size="5" font-weight="bold" class="icon">$</text>
+</svg>
