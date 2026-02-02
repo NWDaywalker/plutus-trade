@@ -1184,6 +1184,7 @@ const ResearchDashboard = () => {
             items.slice(0, 50).map((item, idx) => {
               const heatLevel = getHeatLevel(item.upvotes, item.comments);
               const itemIsRecent = isRecent(item.timestamp);
+              const hasUrl = item.url && item.url.length > 0;
               
               return (
               <Card 
@@ -1221,15 +1222,38 @@ const ResearchDashboard = () => {
                     {formatTimeAgo(item.timestamp)}
                   </span>
                 </div>
-                <h4 style={{
-                  margin: '0 0 10px 0',
-                  fontSize: DESIGN.typography.size.sm,
-                  fontWeight: DESIGN.typography.weight.medium,
-                  color: DESIGN.colors.text.primary,
-                  lineHeight: 1.5,
-                }}>
-                  {item.title}
-                </h4>
+                {hasUrl ? (
+                  <a 
+                    href={item.url} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    style={{
+                      display: 'block',
+                      margin: '0 0 10px 0',
+                      fontSize: DESIGN.typography.size.sm,
+                      fontWeight: DESIGN.typography.weight.medium,
+                      color: DESIGN.colors.text.primary,
+                      lineHeight: 1.5,
+                      textDecoration: 'none',
+                      transition: DESIGN.transition.fast,
+                    }}
+                    onMouseOver={(e) => e.target.style.color = DESIGN.colors.brand.primary}
+                    onMouseOut={(e) => e.target.style.color = DESIGN.colors.text.primary}
+                  >
+                    {item.title}
+                    <ExternalLink size={12} style={{ marginLeft: '6px', opacity: 0.5, verticalAlign: 'middle' }} />
+                  </a>
+                ) : (
+                  <h4 style={{
+                    margin: '0 0 10px 0',
+                    fontSize: DESIGN.typography.size.sm,
+                    fontWeight: DESIGN.typography.weight.medium,
+                    color: DESIGN.colors.text.primary,
+                    lineHeight: 1.5,
+                  }}>
+                    {item.title}
+                  </h4>
+                )}
                 <div style={{
                   display: 'flex',
                   alignItems: 'center',
