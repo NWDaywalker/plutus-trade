@@ -17,6 +17,8 @@ from .engine import (
 from .reddit_collector import RedditCollector
 from .news_collector import NewsCollector
 from .prediction_market_collector import PredictionMarketCollector
+from .polymarket_collector import PolymarketCollector
+from .social_collector import SocialMediaCollector
 
 
 class ResearchOrchestrator:
@@ -32,6 +34,8 @@ class ResearchOrchestrator:
         self.reddit = RedditCollector(self.db)
         self.news = NewsCollector(self.db)
         self.prediction_markets = PredictionMarketCollector(self.db)
+        self.polymarket = PolymarketCollector(self.db)
+        self.social = SocialMediaCollector(self.db)
         
         # Signal generation thresholds
         self.min_sources = 3
@@ -41,6 +45,8 @@ class ResearchOrchestrator:
         await self.reddit.close()
         await self.news.close()
         await self.prediction_markets.close()
+        await self.polymarket.close()
+        await self.social.close()
     
     async def run_collection(self) -> Dict:
         """Run all collectors and return summary"""
@@ -52,6 +58,8 @@ class ResearchOrchestrator:
             "reddit": {},
             "news": {},
             "prediction_markets": {},
+            "polymarket": {},
+            "social": {},
             "total_items": 0,
             "by_category": {},
             "timestamp": datetime.now(timezone.utc).isoformat()
@@ -72,11 +80,25 @@ class ResearchOrchestrator:
                 results["news"][cat.value] = len(items)
                 results["total_items"] += len(items)
             
-            # Prediction Markets
+            # Prediction Markets (Metaculus, Manifold)
             print("\n🎯 Collecting from Prediction Markets...")
             pm_results = await self.prediction_markets.collect_all()
             for cat, items in pm_results.items():
                 results["prediction_markets"][cat.value] = len(items)
+                results["total_items"] += len(items)
+            
+            # Polymarket Direct
+            print("\n💰 Collecting from Polymarket...")
+            poly_results = await self.polymarket.collect_all()
+            for cat, items in poly_results.items():
+                results["polymarket"][cat.value] = len(items)
+                results["total_items"] += len(items)
+            
+            # Social Media (Twitter/Nitter, Fear & Greed)
+            print("\n🐦 Collecting from Social Media...")
+            social_results = await self.social.collect_all()
+            for cat, items in social_results.items():
+                results["social"][cat.value] = len(items)
                 results["total_items"] += len(items)
             
             # Calculate totals by category
@@ -84,7 +106,9 @@ class ResearchOrchestrator:
                 cat_total = (
                     results["reddit"].get(category.value, 0) +
                     results["news"].get(category.value, 0) +
-                    results["prediction_markets"].get(category.value, 0)
+                    results["prediction_markets"].get(category.value, 0) +
+                    results["polymarket"].get(category.value, 0) +
+                    results["social"].get(category.value, 0)
                 )
                 results["by_category"][category.value] = cat_total
             
