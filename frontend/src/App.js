@@ -520,7 +520,7 @@ function App() {
 
   const checkHealth = async () => {
     try {
-      const response = await fetch('/api/health');
+      const response = await fetch('https://plutus-trade-backend.onrender.com/api/health');
       const data = await response.json();
       setConnected(data.broker_connected);
       setLoading(false);
@@ -544,28 +544,28 @@ function App() {
 
   const fetchAccount = async () => {
     try {
-      const response = await fetch('/api/account');
+      const response = await fetch('https://plutus-trade-backend.onrender.com/api/account');
       if (response.ok) setAccount(await response.json());
     } catch (err) {}
   };
 
   const fetchPositions = async () => {
     try {
-      const response = await fetch('/api/positions');
+      const response = await fetch('https://plutus-trade-backend.onrender.com/api/positions');
       if (response.ok) setPositions(await response.json());
     } catch (err) {}
   };
 
   const fetchOrders = async () => {
     try {
-      const response = await fetch('/api/orders?status=open');
+      const response = await fetch('https://plutus-trade-backend.onrender.com/api/orders?status=open');
       if (response.ok) setOrders(await response.json());
     } catch (err) {}
   };
 
   const fetchTrades = async () => {
     try {
-      const response = await fetch('/api/trades?limit=50');
+      const response = await fetch('https://plutus-trade-backend.onrender.com/api/trades?limit=50');
       if (response.ok) {
         const data = await response.json();
         setTrades(data);
@@ -576,7 +576,7 @@ function App() {
 
   const fetchAccountHistory = async () => {
     try {
-      const response = await fetch('/api/account/history?limit=50');
+      const response = await fetch('https://plutus-trade-backend.onrender.com/api/account/history?limit=50');
       if (response.ok) {
         const data = await response.json();
         setAccountHistory(data.reverse());
@@ -586,7 +586,7 @@ function App() {
 
   const fetchBotStatus = async () => {
     try {
-      const response = await fetch('/api/bot/status');
+      const response = await fetch('https://plutus-trade-backend.onrender.com/api/bot/status');
       if (response.ok) {
         const data = await response.json();
         setBotStatus(prev => ({
@@ -623,7 +623,7 @@ function App() {
   const handleGetQuote = async () => {
     if (orderForm.symbol) {
       try {
-        const response = await fetch(`/api/quote/${orderForm.symbol.toUpperCase()}`);
+        const response = await fetch(`https://plutus-trade-backend.onrender.com/api/quote/${orderForm.symbol.toUpperCase()}`);
         if (response.ok) setQuote(await response.json());
       } catch (err) {}
     }
@@ -635,7 +635,7 @@ function App() {
       return;
     }
 
-    const endpoint = orderForm.orderType === 'market' ? '/api/orders/market' : '/api/orders/limit';
+    const endpoint = orderForm.orderType === 'market' ? 'https://plutus-trade-backend.onrender.com/api/orders/market' : 'https://plutus-trade-backend.onrender.com/api/orders/limit';
     const orderData = {
       symbol: orderForm.symbol.toUpperCase(),
       qty: parseFloat(orderForm.qty),
@@ -674,7 +674,7 @@ function App() {
 
   const handleStartBot = async () => {
     try {
-      const response = await fetch('/api/bot/start', { method: 'POST' });
+      const response = await fetch('https://plutus-trade-backend.onrender.com/api/bot/start', { method: 'POST' });
       const data = await response.json();
       
       if (response.ok) {
@@ -690,7 +690,7 @@ function App() {
 
   const handleStopBot = async () => {
     try {
-      const response = await fetch('/api/bot/stop', { method: 'POST' });
+      const response = await fetch('https://plutus-trade-backend.onrender.com/api/bot/stop', { method: 'POST' });
       const data = await response.json();
       
       if (response.ok) {
@@ -711,7 +711,7 @@ function App() {
     }
     
     try {
-      const response = await fetch('/api/bot/config', {
+      const response = await fetch('https://plutus-trade-backend.onrender.com/api/bot/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ strategy: newStrategy })
@@ -733,7 +733,7 @@ function App() {
   const fetchRecommendations = async () => {
     setLoadingIntelligence(true);
     try {
-      const response = await fetch('/api/intelligence/recommendations');
+      const response = await fetch('https://plutus-trade-backend.onrender.com/api/intelligence/recommendations');
       if (response.ok) {
         const data = await response.json();
         setRecommendations(data.recommendations || []);
