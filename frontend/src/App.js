@@ -5,7 +5,7 @@ import {
   ChevronRight, Clock, Globe, Shield, Cpu, Eye, Layers,
   ArrowUpRight, ArrowDownRight, Minus, RefreshCw, Terminal,
   PieChart, LineChart as LineChartIcon, Settings, Bell, Search,
-  Menu, X, ExternalLink, Wifi, WifiOff
+  Menu, X, ExternalLink, Wifi, WifiOff, Flame, MessageSquare, ArrowUp
 } from 'lucide-react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, 
@@ -51,8 +51,10 @@ const DESIGN = {
     semantic: {
       profit: '#10B981',      // Emerald green
       profitMuted: '#059669',
+      profitBg: 'rgba(16, 185, 129, 0.08)',
       loss: '#EF4444',        // Clear red
       lossMuted: '#DC2626',
+      lossBg: 'rgba(239, 68, 68, 0.08)',
       warning: '#FBBF24',     // Amber
       neutral: '#6B7280',
     },
@@ -70,6 +72,8 @@ const DESIGN = {
       subtle: 'rgba(255, 255, 255, 0.06)',
       default: 'rgba(255, 255, 255, 0.1)',
       strong: 'rgba(255, 255, 255, 0.15)',
+      profit: 'rgba(16, 185, 129, 0.3)',
+      loss: 'rgba(239, 68, 68, 0.3)',
     },
   },
   
@@ -159,6 +163,133 @@ const RESEARCH_API = `${API_BASE}/research`;
 // ═══════════════════════════════════════════════════════════════════════════════
 // UTILITY COMPONENTS
 // ═══════════════════════════════════════════════════════════════════════════════
+
+// Radar Scanner Animation Component
+const RadarScanner = ({ size = 120, scanning = false }) => (
+  <div style={{
+    position: 'relative',
+    width: size,
+    height: size,
+    margin: '0 auto',
+  }}>
+    {[1, 2, 3].map((ring) => (
+      <div
+        key={ring}
+        style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          width: `${(ring / 3) * 100}%`,
+          height: `${(ring / 3) * 100}%`,
+          borderRadius: '50%',
+          border: `1px solid ${DESIGN.colors.brand.primary}${ring === 3 ? '40' : '20'}`,
+        }}
+      />
+    ))}
+    {scanning && (
+      <div
+        style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          width: '50%',
+          height: '2px',
+          background: `linear-gradient(90deg, ${DESIGN.colors.brand.primary} 0%, transparent 100%)`,
+          transformOrigin: 'left center',
+          animation: 'radarSweep 2s linear infinite',
+        }}
+      />
+    )}
+    <div
+      style={{
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        width: 8,
+        height: 8,
+        borderRadius: '50%',
+        backgroundColor: DESIGN.colors.brand.primary,
+        boxShadow: DESIGN.shadows.glow.orange,
+      }}
+    />
+    {scanning && (
+      <>
+        <div style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          width: '100%',
+          height: '100%',
+          borderRadius: '50%',
+          border: `2px solid ${DESIGN.colors.brand.primary}`,
+          animation: 'radarPulse 2s ease-out infinite',
+          opacity: 0,
+        }} />
+        <div style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          width: '100%',
+          height: '100%',
+          borderRadius: '50%',
+          border: `2px solid ${DESIGN.colors.brand.primary}`,
+          animation: 'radarPulse 2s ease-out infinite 0.5s',
+          opacity: 0,
+        }} />
+      </>
+    )}
+  </div>
+);
+
+// Heat Badge for high engagement
+const HeatBadge = ({ level }) => {
+  if (level < 2) return null;
+  const colors = {
+    2: { bg: 'rgba(251, 191, 36, 0.15)', text: '#FBBF24', label: 'WARM' },
+    3: { bg: 'rgba(249, 115, 22, 0.15)', text: '#F97316', label: 'HOT' },
+    4: { bg: 'rgba(239, 68, 68, 0.15)', text: '#EF4444', label: '🔥' },
+  };
+  const style = colors[Math.min(level, 4)];
+  return (
+    <span style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: '4px',
+      padding: '2px 8px',
+      backgroundColor: style.bg,
+      color: style.text,
+      fontSize: DESIGN.typography.size.xs,
+      fontWeight: DESIGN.typography.weight.bold,
+      borderRadius: DESIGN.radius.full,
+      textTransform: 'uppercase',
+      letterSpacing: DESIGN.typography.letterSpacing.wide,
+    }}>
+      {style.label}
+    </span>
+  );
+};
+
+// NEW badge for recent items
+const NewBadge = () => (
+  <span style={{
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '2px 6px',
+    backgroundColor: DESIGN.colors.accent.cyanGlow,
+    color: DESIGN.colors.accent.cyan,
+    fontSize: '10px',
+    fontWeight: DESIGN.typography.weight.bold,
+    borderRadius: DESIGN.radius.sm,
+    textTransform: 'uppercase',
+    letterSpacing: DESIGN.typography.letterSpacing.wider,
+  }}>
+    NEW
+  </span>
+);
 
 // Animated number display
 const AnimatedValue = ({ value, prefix = '', suffix = '', color }) => {
@@ -308,26 +439,36 @@ const SectionHeader = ({ icon: Icon, title, action, children }) => (
 );
 
 // Card Component
-const Card = ({ children, style = {}, hover = false, glow = false, onClick }) => (
-  <div 
-    onClick={onClick}
-    style={{
-      backgroundColor: DESIGN.colors.bg.elevated,
-      border: `1px solid ${DESIGN.colors.border.subtle}`,
-      borderRadius: DESIGN.radius.lg,
-      padding: '20px',
-      transition: DESIGN.transition.base,
-      cursor: onClick ? 'pointer' : 'default',
-      ...(glow && {
-        boxShadow: DESIGN.shadows.glow.orange,
-        borderColor: `${DESIGN.colors.brand.primary}30`,
-      }),
-      ...style,
-    }}
-  >
-    {children}
-  </div>
-);
+const Card = ({ children, style = {}, hover = false, glow = false, sentiment = null, hot = false, onClick }) => {
+  const getSentimentBorder = () => {
+    if (sentiment === null || sentiment === undefined) return DESIGN.colors.border.subtle;
+    if (sentiment > 0) return DESIGN.colors.border.profit;
+    if (sentiment < 0) return DESIGN.colors.border.loss;
+    return DESIGN.colors.border.subtle;
+  };
+  
+  return (
+    <div 
+      onClick={onClick}
+      style={{
+        backgroundColor: hot ? 'rgba(249, 115, 22, 0.03)' : DESIGN.colors.bg.elevated,
+        border: `1px solid ${getSentimentBorder()}`,
+        borderLeft: sentiment !== null && sentiment !== undefined ? `3px solid ${sentiment > 0 ? DESIGN.colors.semantic.profit : sentiment < 0 ? DESIGN.colors.semantic.loss : DESIGN.colors.border.subtle}` : undefined,
+        borderRadius: DESIGN.radius.lg,
+        padding: '20px',
+        transition: DESIGN.transition.base,
+        cursor: onClick ? 'pointer' : 'default',
+        ...(glow && {
+          boxShadow: DESIGN.shadows.glow.orange,
+          borderColor: `${DESIGN.colors.brand.primary}30`,
+        }),
+        ...style,
+      }}
+    >
+      {children}
+    </div>
+  );
+};
 
 // Button Component
 const Button = ({ 
@@ -407,7 +548,7 @@ const Button = ({
 };
 
 // Metric Display
-const Metric = ({ label, value, prefix = '', suffix = '', trend, size = 'md', color }) => {
+const Metric = ({ label, value, prefix = '', suffix = '', trend, size = 'md', color, stacked = false }) => {
   const sizes = {
     sm: { value: DESIGN.typography.size.lg, label: DESIGN.typography.size.xs },
     md: { value: DESIGN.typography.size.xl, label: DESIGN.typography.size.xs },
@@ -427,7 +568,12 @@ const Metric = ({ label, value, prefix = '', suffix = '', trend, size = 'md', co
       }}>
         {label}
       </div>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+      <div style={{ 
+        display: 'flex', 
+        flexDirection: stacked ? 'column' : 'row',
+        alignItems: stacked ? 'flex-start' : 'baseline', 
+        gap: stacked ? '4px' : '8px' 
+      }}>
         <span style={{
           fontSize: sizes[size].value,
           fontFamily: DESIGN.typography.fontFamily.mono,
@@ -479,6 +625,44 @@ const TabNav = ({ tabs, activeTab, onChange }) => (
           cursor: 'pointer',
           transition: DESIGN.transition.fast,
           boxShadow: activeTab === tab.id ? DESIGN.shadows.glow.orange : 'none',
+        }}
+      >
+        {tab.icon && <tab.icon size={16} />}
+        {tab.label}
+      </button>
+    ))}
+  </div>
+);
+
+// Subtle Tab Navigation (underline style)
+const TabNavSubtle = ({ tabs, activeTab, onChange }) => (
+  <div style={{
+    display: 'flex',
+    gap: '0',
+    borderBottom: `1px solid ${DESIGN.colors.border.subtle}`,
+  }}>
+    {tabs.map(tab => (
+      <button
+        key={tab.id}
+        onClick={() => onChange(tab.id)}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '8px',
+          padding: '12px 24px',
+          background: 'transparent',
+          border: 'none',
+          borderBottom: activeTab === tab.id 
+            ? `2px solid ${DESIGN.colors.brand.primary}`
+            : '2px solid transparent',
+          marginBottom: '-1px',
+          color: activeTab === tab.id ? DESIGN.colors.brand.primary : DESIGN.colors.text.secondary,
+          fontSize: DESIGN.typography.size.sm,
+          fontWeight: DESIGN.typography.weight.semibold,
+          fontFamily: DESIGN.typography.fontFamily.body,
+          cursor: 'pointer',
+          transition: DESIGN.transition.fast,
         }}
       >
         {tab.icon && <tab.icon size={16} />}
@@ -575,6 +759,21 @@ const ResearchDashboard = () => {
     if (diffHours < 24) return `${diffHours}h`;
     return `${Math.floor(diffHours / 24)}d`;
   };
+
+  const isRecent = (timestamp) => {
+    const diffMins = Math.floor((new Date() - new Date(timestamp)) / 60000);
+    return diffMins < 60;
+  };
+
+  const getHeatLevel = (upvotes, comments) => {
+    const score = (upvotes || 0) + (comments || 0) * 2;
+    if (score > 50000) return 4;
+    if (score > 20000) return 3;
+    if (score > 5000) return 2;
+    return 1;
+  };
+
+  const actualItemCount = items.length;
 
   return (
     <div>
@@ -701,8 +900,8 @@ const ResearchDashboard = () => {
       </div>
 
       {/* View Toggle */}
-      <div style={{ marginBottom: '20px' }}>
-        <TabNav
+      <div style={{ marginBottom: '24px' }}>
+        <TabNavSubtle
           tabs={[
             { id: 'signals', label: 'Trading Signals', icon: Zap },
             { id: 'feed', label: 'Intelligence Feed', icon: Radio },
@@ -720,10 +919,17 @@ const ResearchDashboard = () => {
           alignItems: 'center',
           justifyContent: 'center',
           padding: '80px 20px',
-          color: DESIGN.colors.text.tertiary,
         }}>
-          <RefreshCw size={32} style={{ animation: 'spin 1s linear infinite', marginBottom: '16px' }} />
-          <span>Loading intelligence data...</span>
+          <RadarScanner size={120} scanning={true} />
+          <p style={{ 
+            color: DESIGN.colors.text.secondary, 
+            marginTop: '24px',
+            fontSize: DESIGN.typography.size.sm,
+            textTransform: 'uppercase',
+            letterSpacing: DESIGN.typography.letterSpacing.wider,
+          }}>
+            Scanning intelligence sources...
+          </p>
         </div>
       ) : error ? (
         <Card style={{ textAlign: 'center', padding: '60px' }}>
@@ -738,14 +944,42 @@ const ResearchDashboard = () => {
           gap: '16px',
         }}>
           {signals.length === 0 ? (
-            <Card style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '60px' }}>
-              <Crosshair size={48} color={DESIGN.colors.text.tertiary} style={{ marginBottom: '16px' }} />
-              <h3 style={{ color: DESIGN.colors.text.primary, marginBottom: '8px' }}>No Active Signals</h3>
-              <p style={{ color: DESIGN.colors.text.tertiary, marginBottom: '20px' }}>
-                Run a scan to generate trading signals from market intelligence.
+            <div style={{ 
+              gridColumn: '1 / -1',
+              backgroundColor: DESIGN.colors.bg.elevated,
+              border: `1px solid ${DESIGN.colors.border.subtle}`,
+              borderRadius: DESIGN.radius.xl,
+              padding: '60px 40px',
+              textAlign: 'center',
+            }}>
+              <RadarScanner size={140} scanning={isCollecting} />
+              <h3 style={{ 
+                color: DESIGN.colors.text.primary, 
+                margin: '24px 0 8px 0',
+                fontSize: DESIGN.typography.size.xl,
+                fontFamily: DESIGN.typography.fontFamily.display,
+                textTransform: 'uppercase',
+                letterSpacing: DESIGN.typography.letterSpacing.wide,
+              }}>
+                {isCollecting ? 'SCANNING...' : 'AWAITING SCAN'}
+              </h3>
+              <p style={{ 
+                color: DESIGN.colors.text.tertiary, 
+                marginBottom: '24px',
+                maxWidth: '400px',
+                margin: '0 auto 24px auto',
+              }}>
+                {isCollecting 
+                  ? 'Analyzing Reddit, news feeds, and prediction markets for trading opportunities...'
+                  : 'Initialize a scan to generate AI-powered trading signals from market intelligence.'
+                }
               </p>
-              <Button onClick={runCollection} icon={RefreshCw}>Run Scan</Button>
-            </Card>
+              {!isCollecting && (
+                <Button onClick={runCollection} icon={RefreshCw} size="lg">
+                  Initialize Scan
+                </Button>
+              )}
+            </div>
           ) : (
             signals
               .filter(s => selectedCategory === 'all' || s.category === selectedCategory)
@@ -914,46 +1148,85 @@ const ResearchDashboard = () => {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {items.length === 0 ? (
-            <Card style={{ textAlign: 'center', padding: '60px' }}>
-              <Radio size={48} color={DESIGN.colors.text.tertiary} style={{ marginBottom: '16px' }} />
-              <h3 style={{ color: DESIGN.colors.text.primary, marginBottom: '8px' }}>No Intelligence Data</h3>
-              <p style={{ color: DESIGN.colors.text.tertiary, marginBottom: '20px' }}>
+            <div style={{ 
+              backgroundColor: DESIGN.colors.bg.elevated,
+              border: `1px solid ${DESIGN.colors.border.subtle}`,
+              borderRadius: DESIGN.radius.xl,
+              padding: '60px 40px',
+              textAlign: 'center',
+            }}>
+              <RadarScanner size={140} scanning={isCollecting} />
+              <h3 style={{ 
+                color: DESIGN.colors.text.primary, 
+                margin: '24px 0 8px 0',
+                fontSize: DESIGN.typography.size.xl,
+                fontFamily: DESIGN.typography.fontFamily.display,
+                textTransform: 'uppercase',
+                letterSpacing: DESIGN.typography.letterSpacing.wide,
+              }}>
+                {isCollecting ? 'COLLECTING...' : 'NO INTELLIGENCE DATA'}
+              </h3>
+              <p style={{ 
+                color: DESIGN.colors.text.tertiary, 
+                marginBottom: '24px',
+                maxWidth: '400px',
+                margin: '0 auto 24px auto',
+              }}>
                 Run a scan to collect intelligence from Reddit, news, and prediction markets.
               </p>
-              <Button onClick={runCollection} icon={RefreshCw}>Run Scan</Button>
-            </Card>
+              {!isCollecting && (
+                <Button onClick={runCollection} icon={RefreshCw} size="lg">
+                  Initialize Scan
+                </Button>
+              )}
+            </div>
           ) : (
-            items.slice(0, 50).map((item, idx) => (
-              <Card key={idx} style={{ padding: '16px' }}>
+            items.slice(0, 50).map((item, idx) => {
+              const heatLevel = getHeatLevel(item.upvotes, item.comments);
+              const itemIsRecent = isRecent(item.timestamp);
+              
+              return (
+              <Card 
+                key={idx} 
+                style={{ padding: '16px' }}
+                sentiment={item.sentiment}
+                hot={heatLevel >= 3}
+              >
                 <div style={{
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'flex-start',
                   marginBottom: '8px',
+                  gap: '12px',
                 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <span style={{
+                      fontSize: DESIGN.typography.size.xs,
+                      color: DESIGN.colors.brand.primary,
+                      fontWeight: DESIGN.typography.weight.semibold,
+                      textTransform: 'uppercase',
+                      letterSpacing: DESIGN.typography.letterSpacing.wide,
+                    }}>
+                      {item.source_name}
+                    </span>
+                    {itemIsRecent && <NewBadge />}
+                    <HeatBadge level={heatLevel} />
+                  </div>
                   <span style={{
-                    fontSize: DESIGN.typography.size.xs,
-                    color: DESIGN.colors.brand.primary,
-                    fontWeight: DESIGN.typography.weight.semibold,
-                    textTransform: 'uppercase',
-                    letterSpacing: DESIGN.typography.letterSpacing.wide,
-                  }}>
-                    {item.source_name}
-                  </span>
-                  <span style={{
-                    fontSize: DESIGN.typography.size.xs,
-                    color: DESIGN.colors.text.tertiary,
+                    fontSize: DESIGN.typography.size.sm,
+                    color: DESIGN.colors.text.secondary,
                     fontFamily: DESIGN.typography.fontFamily.mono,
+                    whiteSpace: 'nowrap',
                   }}>
                     {formatTimeAgo(item.timestamp)}
                   </span>
                 </div>
                 <h4 style={{
-                  margin: '0 0 8px 0',
+                  margin: '0 0 10px 0',
                   fontSize: DESIGN.typography.size.sm,
                   fontWeight: DESIGN.typography.weight.medium,
                   color: DESIGN.colors.text.primary,
-                  lineHeight: 1.4,
+                  lineHeight: 1.5,
                 }}>
                   {item.title}
                 </h4>
@@ -964,20 +1237,48 @@ const ResearchDashboard = () => {
                   fontSize: DESIGN.typography.size.xs,
                 }}>
                   <span style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '3px 8px',
+                    borderRadius: DESIGN.radius.sm,
+                    backgroundColor: item.sentiment > 0 
+                      ? DESIGN.colors.semantic.profitBg
+                      : item.sentiment < 0 
+                        ? DESIGN.colors.semantic.lossBg
+                        : DESIGN.colors.bg.surface,
                     color: item.sentiment > 0 
                       ? DESIGN.colors.semantic.profit 
                       : item.sentiment < 0 
                         ? DESIGN.colors.semantic.loss 
                         : DESIGN.colors.text.tertiary,
+                    fontWeight: DESIGN.typography.weight.semibold,
                   }}>
-                    {item.sentiment > 0 ? '↑ Bullish' : item.sentiment < 0 ? '↓ Bearish' : '→ Neutral'}
+                    {item.sentiment > 0 ? <TrendingUp size={12} /> : item.sentiment < 0 ? <TrendingDown size={12} /> : <Minus size={12} />}
+                    {item.sentiment > 0 ? 'Bullish' : item.sentiment < 0 ? 'Bearish' : 'Neutral'}
                   </span>
-                  <span style={{ color: DESIGN.colors.text.tertiary }}>
-                    ⬆ {item.upvotes || 0} · 💬 {item.comments || 0}
+                  <span style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '4px',
+                    color: DESIGN.colors.text.tertiary 
+                  }}>
+                    <ArrowUp size={12} />
+                    {(item.upvotes || 0).toLocaleString()}
+                  </span>
+                  <span style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '4px',
+                    color: DESIGN.colors.text.tertiary 
+                  }}>
+                    <MessageSquare size={12} />
+                    {(item.comments || 0).toLocaleString()}
                   </span>
                 </div>
               </Card>
-            ))
+            );
+            })
           )}
         </div>
       )}
@@ -1208,19 +1509,13 @@ function App() {
         flexDirection: 'column',
         gap: '24px',
       }}>
-        <div style={{
-          width: 60,
-          height: 60,
-          border: `2px solid ${DESIGN.colors.border.subtle}`,
-          borderTopColor: DESIGN.colors.brand.primary,
-          borderRadius: '50%',
-          animation: 'spin 1s linear infinite',
-        }} />
+        <RadarScanner size={100} scanning={true} />
         <div style={{
           fontFamily: DESIGN.typography.fontFamily.display,
-          fontSize: DESIGN.typography.size.lg,
+          fontSize: DESIGN.typography.size.sm,
           color: DESIGN.colors.text.secondary,
           letterSpacing: DESIGN.typography.letterSpacing.wider,
+          textTransform: 'uppercase',
         }}>
           INITIALIZING PLUTUS TERMINAL
         </div>
@@ -1241,6 +1536,11 @@ function App() {
         @keyframes ping { 75%, 100% { transform: scale(2); opacity: 0; } }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes radarSweep { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes radarPulse { 
+          0% { transform: translate(-50%, -50%) scale(0.3); opacity: 1; }
+          100% { transform: translate(-50%, -50%) scale(1); opacity: 0; }
+        }
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
       `}</style>
 
@@ -1499,7 +1799,7 @@ function App() {
                         size="lg"
                       />
                     </Card>
-                    <Card>
+                    <Card glow={totalPnL > 0}>
                       <Metric 
                         label="Day P&L" 
                         value={totalPnL} 
@@ -1507,6 +1807,7 @@ function App() {
                         trend={totalPnLPercent * 100}
                         size="lg"
                         color={totalPnL >= 0 ? DESIGN.colors.semantic.profit : DESIGN.colors.semantic.loss}
+                        stacked={true}
                       />
                     </Card>
                   </div>
