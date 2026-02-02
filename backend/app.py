@@ -11,6 +11,7 @@ import threading
 from database import Database
 from credentials import CredentialManager
 from alpaca_broker import AlpacaBroker
+from research_api import research_bp  # NEW: Import research blueprint
 
 # Load environment variables
 load_dotenv()
@@ -18,6 +19,9 @@ load_dotenv()
 # Initialize Flask app
 app = Flask(__name__)
 CORS(app)  # Enable CORS for React frontend
+
+# NEW: Register research blueprint
+app.register_blueprint(research_bp)
 
 # Initialize components
 DB_PATH = os.getenv('DATABASE_PATH', '../data/trading.db')
@@ -770,6 +774,7 @@ if __name__ == '__main__':
     if broker:
         print("✅ Connected to Alpaca Paper Trading")
         print("✅ Database ready")
+        print("✅ Research module loaded")
         print("\n📊 API Endpoints available at http://localhost:5000/api/")
         print("   - GET  /api/health")
         print("   - GET  /api/account")
@@ -780,6 +785,7 @@ if __name__ == '__main__':
         print("   - POST /api/orders/market")
         print("   - POST /api/orders/limit")
         print("   - GET  /api/trades")
+        print("   - GET  /api/research/*  (NEW)")
     else:
         print("⚠️  Broker not connected - configure API keys in .env file")
     
