@@ -1,8 +1,369 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { TrendingUp, DollarSign, Activity, AlertCircle, Bot, BarChart3, Target } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 import './index.css';
 
+// ==================== RESEARCH DASHBOARD COMPONENT ====================
+const API_BASE = 'https://plutus-trade-backend.onrender.com/api/research';
+
+const ResearchDashboard = () => {
+  const [activeResearchTab, setActiveResearchTab] = useState('signals');
+  const [signals, setSignals] = useState([]);
+  const [items, setItems] = useState([]);
+  const [stats, setStats] = useState(null);
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [isCollecting, setIsCollecting] = useState(false);
+  const [lastCollection, setLastCollection] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const categories = [
+    { id: 'all', label: 'All', icon: '📊', color: '#8B5CF6' },
+    { id: 'politics', label: 'Politics', icon: '🏛️', color: '#EF4444' },
+    { id: 'sports', label: 'Sports', icon: '⚽', color: '#10B981' },
+    { id: 'crypto', label: 'Crypto', icon: '₿', color: '#F59E0B' },
+    { id: 'entertainment', label: 'Entertainment', icon: '🎬', color: '#EC4899' },
+  ];
+
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const [signalsRes, statsRes] = await Promise.all([
+        fetch(`${API_BASE}/signals`),
+        fetch(`${API_BASE}/stats`),
+      ]);
+
+      if (signalsRes.ok) {
+        const signalsData = await signalsRes.json();
+        setSignals(signalsData.signals || []);
+      }
+
+      if (statsRes.ok) {
+        const statsData = await statsRes.json();
+        setStats(statsData);
+      }
+
+      const itemsUrl = selectedCategory === 'all' 
+        ? `${API_BASE}/items`
+        : `${API_BASE}/items/${selectedCategory}`;
+      
+      const itemsRes = await fetch(itemsUrl);
+      if (itemsRes.ok) {
+        const itemsData = await itemsRes.json();
+        setItems(itemsData.items || []);
+      }
+
+    } catch (err) {
+      setError('Failed to fetch research data');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedCategory]);
+
+  useEffect(() => {
+    fetchData();
+    const interval = setInterval(fetchData, 300000);
+    return () => clearInterval(interval);
+  }, [fetchData]);
+
+  const runCollection = async () => {
+    setIsCollecting(true);
+    try {
+      const res = await fetch(`${API_BASE}/collect`, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        setLastCollection(data);
+        setTimeout(fetchData, 2000);
+      }
+    } catch (err) {
+      console.error('Collection failed:', err);
+    } finally {
+      setIsCollecting(false);
+    }
+  };
+
+  const getSentimentColor = (score) => {
+    if (score > 0.2) return '#10B981';
+    if (score < -0.2) return '#EF4444';
+    return '#6B7280';
+  };
+
+  const getConfidenceWidth = (confidence) => `${Math.min(confidence * 100, 100)}%`;
+
+  const formatTimeAgo = (timestamp) => {
+    const now = new Date();
+    const then = new Date(timestamp);
+    const diffMs = now - then;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    return `${diffDays}d ago`;
+  };
+
+  return (
+    <div>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: '24px', background: 'linear-gradient(135deg, #8B5CF6, #EC4899)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+            🔬 Deep Research for Polymarket
+          </h2>
+          <p style={{ color: '#94a3b8', margin: '4px 0 0 0', fontSize: '14px' }}>AI-powered market intelligence from Reddit, News & Prediction Markets</p>
+        </div>
+        <button 
+          onClick={runCollection}
+          disabled={isCollecting}
+          className="btn btn-primary"
+          style={{ opacity: isCollecting ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: '8px' }}
+        >
+          {isCollecting ? '⏳ Collecting...' : '🔄 Run Collection'}
+        </button>
+      </div>
+
+      {/* Stats Bar */}
+      {stats && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+          <div className="card" style={{ padding: '16px' }}>
+            <div style={{ fontSize: '24px', fontWeight: '700', color: '#8B5CF6' }}>{stats.total_items || 0}</div>
+            <div style={{ fontSize: '12px', color: '#94a3b8' }}>Research Items</div>
+          </div>
+          <div className="card" style={{ padding: '16px' }}>
+            <div style={{ fontSize: '24px', fontWeight: '700', color: '#10B981' }}>{stats.active_signals || 0}</div>
+            <div style={{ fontSize: '12px', color: '#94a3b8' }}>Active Signals</div>
+          </div>
+          <div className="card" style={{ padding: '16px' }}>
+            <div style={{ fontSize: '24px', fontWeight: '700', color: '#F59E0B' }}>{stats.sources_count || 0}</div>
+            <div style={{ fontSize: '12px', color: '#94a3b8' }}>Sources</div>
+          </div>
+          <div className="card" style={{ padding: '16px' }}>
+            <div style={{ fontSize: '24px', fontWeight: '700', color: '#EC4899' }}>{stats.last_collection ? formatTimeAgo(stats.last_collection) : 'Never'}</div>
+            <div style={{ fontSize: '12px', color: '#94a3b8' }}>Last Update</div>
+          </div>
+        </div>
+      )}
+
+      {/* Category Filters */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', flexWrap: 'wrap' }}>
+        {categories.map((cat) => (
+          <button
+            key={cat.id}
+            onClick={() => setSelectedCategory(cat.id)}
+            className="btn"
+            style={{
+              backgroundColor: selectedCategory === cat.id ? cat.color : '#1e293b',
+              borderColor: cat.color,
+              color: selectedCategory === cat.id ? '#fff' : cat.color,
+              border: `2px solid ${cat.color}`,
+              padding: '8px 16px',
+              borderRadius: '20px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <span>{cat.icon}</span>
+            {cat.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Sub-Tabs */}
+      <div style={{ display: 'flex', gap: '24px', borderBottom: '1px solid #334155', marginBottom: '24px' }}>
+        <button
+          onClick={() => setActiveResearchTab('signals')}
+          className="btn"
+          style={{
+            background: 'none',
+            border: 'none',
+            borderBottom: activeResearchTab === 'signals' ? '3px solid #8B5CF6' : '3px solid transparent',
+            color: activeResearchTab === 'signals' ? '#8B5CF6' : '#94a3b8',
+            padding: '12px 0',
+            fontSize: '15px',
+            fontWeight: '600',
+            borderRadius: 0
+          }}
+        >
+          📈 Trading Signals
+        </button>
+        <button
+          onClick={() => setActiveResearchTab('feed')}
+          className="btn"
+          style={{
+            background: 'none',
+            border: 'none',
+            borderBottom: activeResearchTab === 'feed' ? '3px solid #8B5CF6' : '3px solid transparent',
+            color: activeResearchTab === 'feed' ? '#8B5CF6' : '#94a3b8',
+            padding: '12px 0',
+            fontSize: '15px',
+            fontWeight: '600',
+            borderRadius: 0
+          }}
+        >
+          📰 Research Feed
+        </button>
+      </div>
+
+      {/* Content */}
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '60px', color: '#94a3b8' }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>⏳</div>
+          <p>Loading research data...</p>
+        </div>
+      ) : error ? (
+        <div style={{ textAlign: 'center', padding: '60px', color: '#EF4444' }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚠️</div>
+          <p>{error}</p>
+          <button className="btn btn-primary" onClick={fetchData} style={{ marginTop: '16px' }}>Retry</button>
+        </div>
+      ) : activeResearchTab === 'signals' ? (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '20px' }}>
+          {signals.length === 0 ? (
+            <div className="card" style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '60px' }}>
+              <div style={{ fontSize: '64px', marginBottom: '16px' }}>📊</div>
+              <h3>No Signals Yet</h3>
+              <p style={{ color: '#94a3b8' }}>Run a collection to generate trading signals based on market research.</p>
+              <button className="btn btn-primary" onClick={runCollection} style={{ marginTop: '16px' }}>Run Collection</button>
+            </div>
+          ) : (
+            signals
+              .filter(s => selectedCategory === 'all' || s.category === selectedCategory)
+              .map((signal, idx) => (
+                <div key={idx} className="card" style={{ padding: '20px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: '600', color: '#94a3b8', textTransform: 'uppercase' }}>
+                      {categories.find(c => c.id === signal.category)?.icon} {signal.category}
+                    </span>
+                    <span style={{
+                      padding: '4px 12px',
+                      borderRadius: '20px',
+                      fontSize: '12px',
+                      fontWeight: '700',
+                      color: '#fff',
+                      backgroundColor: signal.side === 'YES' ? '#10B981' : '#EF4444',
+                    }}>
+                      {signal.side}
+                    </span>
+                  </div>
+                  
+                  <h3 style={{ fontSize: '16px', fontWeight: '600', margin: '0 0 16px 0', color: '#F3F4F6' }}>
+                    {signal.market_question}
+                  </h3>
+                  
+                  <div style={{ display: 'flex', gap: '16px', marginBottom: '16px', flexWrap: 'wrap' }}>
+                    <div style={{ flex: 1, minWidth: '80px' }}>
+                      <div style={{ fontSize: '11px', color: '#6B7280', textTransform: 'uppercase', marginBottom: '4px' }}>Confidence</div>
+                      <div style={{ height: '6px', backgroundColor: '#334155', borderRadius: '3px', overflow: 'hidden', marginBottom: '4px' }}>
+                        <div style={{
+                          height: '100%',
+                          width: getConfidenceWidth(signal.confidence),
+                          backgroundColor: signal.confidence > 0.7 ? '#10B981' : signal.confidence > 0.5 ? '#F59E0B' : '#EF4444',
+                          borderRadius: '3px',
+                        }}></div>
+                      </div>
+                      <span style={{ fontSize: '14px', fontWeight: '600' }}>{(signal.confidence * 100).toFixed(0)}%</span>
+                    </div>
+                    
+                    <div style={{ flex: 1, minWidth: '80px' }}>
+                      <div style={{ fontSize: '11px', color: '#6B7280', textTransform: 'uppercase', marginBottom: '4px' }}>Sentiment</div>
+                      <span style={{ fontSize: '14px', fontWeight: '600', color: getSentimentColor(signal.sentiment_score) }}>
+                        {signal.sentiment_score > 0 ? '↑' : signal.sentiment_score < 0 ? '↓' : '→'}
+                        {' '}{(signal.sentiment_score * 100).toFixed(0)}%
+                      </span>
+                    </div>
+                    
+                    <div style={{ flex: 1, minWidth: '80px' }}>
+                      <div style={{ fontSize: '11px', color: '#6B7280', textTransform: 'uppercase', marginBottom: '4px' }}>Sources</div>
+                      <span style={{ fontSize: '14px', fontWeight: '600' }}>{signal.sources_count}</span>
+                    </div>
+                  </div>
+
+                  <p style={{ fontSize: '13px', color: '#94a3b8', lineHeight: '1.5', marginBottom: '16px' }}>
+                    {signal.reasoning}
+                  </p>
+
+                  {signal.datapoints && signal.datapoints.length > 0 && (
+                    <div style={{ backgroundColor: '#0f172a', borderRadius: '8px', padding: '12px', marginBottom: '12px' }}>
+                      <h4 style={{ fontSize: '11px', color: '#6B7280', textTransform: 'uppercase', margin: '0 0 8px 0' }}>Key Datapoints</h4>
+                      {signal.datapoints.slice(0, 3).map((dp, i) => (
+                        <div key={i} style={{ display: 'flex', gap: '8px', fontSize: '12px', marginBottom: '6px' }}>
+                          <span style={{ color: '#8B5CF6', fontWeight: '500', whiteSpace: 'nowrap' }}>{dp.source}</span>
+                          <span style={{ color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{dp.title}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div style={{ borderTop: '1px solid #334155', paddingTop: '12px', marginTop: '12px' }}>
+                    <span style={{ fontSize: '11px', color: '#6B7280' }}>Generated {formatTimeAgo(signal.generated_at)}</span>
+                  </div>
+                </div>
+              ))
+          )}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {items.length === 0 ? (
+            <div className="card" style={{ textAlign: 'center', padding: '60px' }}>
+              <div style={{ fontSize: '64px', marginBottom: '16px' }}>📰</div>
+              <h3>No Research Items</h3>
+              <p style={{ color: '#94a3b8' }}>Run a collection to gather research from Reddit, news, and prediction markets.</p>
+              <button className="btn btn-primary" onClick={runCollection} style={{ marginTop: '16px' }}>Run Collection</button>
+            </div>
+          ) : (
+            items.slice(0, 50).map((item, idx) => (
+              <div key={idx} className="card" style={{ padding: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: '600', color: '#8B5CF6' }}>{item.source_name}</span>
+                  <span style={{ fontSize: '11px', color: '#6B7280' }}>{formatTimeAgo(item.timestamp)}</span>
+                </div>
+                <h4 style={{ fontSize: '14px', fontWeight: '500', margin: '0 0 8px 0', color: '#E5E7EB' }}>{item.title}</h4>
+                <div style={{ display: 'flex', gap: '16px', fontSize: '12px' }}>
+                  <span style={{ fontWeight: '500', color: getSentimentColor(item.sentiment) }}>
+                    {item.sentiment > 0 ? '🟢 Bullish' : item.sentiment < 0 ? '🔴 Bearish' : '⚪ Neutral'}
+                  </span>
+                  <span style={{ color: '#6B7280' }}>⬆️ {item.upvotes || 0} · 💬 {item.comments || 0}</span>
+                </div>
+                {item.url && (
+                  <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', marginTop: '8px', fontSize: '12px', color: '#8B5CF6', textDecoration: 'none' }}>
+                    View Source →
+                  </a>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* Collection Result Toast */}
+      {lastCollection && (
+        <div style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          backgroundColor: '#10B981',
+          color: '#fff',
+          padding: '12px 20px',
+          borderRadius: '8px',
+          display: 'flex',
+          gap: '12px',
+          alignItems: 'center',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+        }}>
+          <span>✅ Collection complete!</span>
+          <span>{lastCollection.total_items} items collected</span>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ==================== MAIN APP COMPONENT ====================
 function App() {
   const [account, setAccount] = useState(null);
   const [positions, setPositions] = useState([]);
@@ -320,8 +681,9 @@ function App() {
 
       {connected && account && (
         <>
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', borderBottom: '2px solid #334155', paddingBottom: '8px' }}>
-            {['dashboard', 'trading', 'bot', 'intelligence', 'analytics'].map(tab => (
+          {/* UPDATED TABS - Added 'research' tab */}
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', borderBottom: '2px solid #334155', paddingBottom: '8px', flexWrap: 'wrap' }}>
+            {['dashboard', 'trading', 'bot', 'research', 'intelligence', 'analytics'].map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -333,7 +695,7 @@ function App() {
                   textTransform: 'capitalize'
                 }}
               >
-                {tab === 'intelligence' ? '🧠 Intelligence' : tab}
+                {tab === 'intelligence' ? '🧠 Intelligence' : tab === 'research' ? '🔬 Research' : tab}
               </button>
             ))}
           </div>
@@ -641,6 +1003,11 @@ function App() {
                 )}
               </div>
             </>
+          )}
+
+          {/* NEW RESEARCH TAB */}
+          {activeTab === 'research' && (
+            <ResearchDashboard />
           )}
 
           {activeTab === 'intelligence' && (
