@@ -519,6 +519,257 @@ const CollectionProgressModal = ({ progress, isVisible }) => {
   );
 };
 
+// ═══════════════════════════════════════════════════════════════════════════
+// UNIFIED TRADING TERMINAL - Consolidated Trading + Auto-Trade with Strategy Allocation
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Strategy definitions with descriptions
+const STRATEGIES = [
+  {
+    id: 'momentum',
+    name: 'Momentum Breakout',
+    description: 'Buys stocks breaking above 20-day highs with volume confirmation. Best in trending markets.',
+    icon: '🚀',
+    color: '#10B981',
+    riskLevel: 'Medium-High',
+  },
+  {
+    id: 'mean_reversion',
+    name: 'Mean Reversion',
+    description: 'Buys oversold stocks expecting bounce to moving average. Works best in ranging markets.',
+    icon: '🔄',
+    color: '#3B82F6',
+    riskLevel: 'Medium',
+  },
+  {
+    id: 'rsi',
+    name: 'RSI Oversold',
+    description: 'Buys when RSI drops below 30, sells above 70. Classic technical indicator strategy.',
+    icon: '📊',
+    color: '#8B5CF6',
+    riskLevel: 'Low-Medium',
+  },
+  {
+    id: 'vwap',
+    name: 'VWAP Bounce',
+    description: 'Buys dips to VWAP, sells at upper bands. Intraday institutional flow strategy.',
+    icon: '📈',
+    color: '#F59E0B',
+    riskLevel: 'Medium',
+  },
+];
+
+// Strategy Allocation Slider Component
+const AllocationSlider = ({ strategy, allocation, onChange, disabled, botCapital }) => {
+  const dollarAmount = (allocation / 100) * botCapital;
+  
+  return (
+    <div style={{
+      padding: '16px 20px',
+      backgroundColor: DESIGN.colors.bg.surface,
+      borderRadius: DESIGN.radius.lg,
+      border: `1px solid ${allocation > 0 ? strategy.color + '40' : DESIGN.colors.border.subtle}`,
+      marginBottom: '12px',
+      opacity: disabled ? 0.6 : 1,
+      transition: DESIGN.transition.fast,
+    }}>
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '12px',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <span style={{ fontSize: '24px' }}>{strategy.icon}</span>
+          <div>
+            <div style={{
+              fontSize: DESIGN.typography.size.base,
+              fontWeight: DESIGN.typography.weight.semibold,
+              color: DESIGN.colors.text.primary,
+            }}>
+              {strategy.name}
+            </div>
+            <div style={{
+              fontSize: DESIGN.typography.size.xs,
+              color: DESIGN.colors.text.tertiary,
+            }}>
+              Risk: {strategy.riskLevel}
+            </div>
+          </div>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{
+            fontSize: DESIGN.typography.size.xl,
+            fontWeight: DESIGN.typography.weight.bold,
+            fontFamily: DESIGN.typography.fontFamily.mono,
+            color: allocation > 0 ? strategy.color : DESIGN.colors.text.tertiary,
+          }}>
+            {allocation}%
+          </div>
+          <div style={{
+            fontSize: DESIGN.typography.size.sm,
+            fontFamily: DESIGN.typography.fontFamily.mono,
+            color: DESIGN.colors.text.secondary,
+          }}>
+            ${dollarAmount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+          </div>
+        </div>
+      </div>
+      
+      {/* Slider */}
+      <input
+        type="range"
+        min="0"
+        max="100"
+        step="5"
+        value={allocation}
+        onChange={(e) => onChange(parseInt(e.target.value))}
+        disabled={disabled}
+        style={{
+          width: '100%',
+          height: '8px',
+          borderRadius: '4px',
+          background: `linear-gradient(to right, ${strategy.color} 0%, ${strategy.color} ${allocation}%, ${DESIGN.colors.bg.elevated} ${allocation}%, ${DESIGN.colors.bg.elevated} 100%)`,
+          WebkitAppearance: 'none',
+          appearance: 'none',
+          cursor: disabled ? 'not-allowed' : 'pointer',
+          outline: 'none',
+        }}
+      />
+      
+      {/* Description */}
+      <div style={{
+        marginTop: '12px',
+        fontSize: DESIGN.typography.size.xs,
+        color: DESIGN.colors.text.tertiary,
+        lineHeight: 1.5,
+      }}>
+        {strategy.description}
+      </div>
+    </div>
+  );
+};
+
+// Allocation Summary Bar
+const AllocationSummary = ({ allocations, botCapital }) => {
+  const total = Object.values(allocations).reduce((sum, val) => sum + val, 0);
+  const unallocated = Math.max(0, 100 - total);
+  
+  return (
+    <div style={{
+      padding: '20px',
+      backgroundColor: DESIGN.colors.bg.elevated,
+      borderRadius: DESIGN.radius.lg,
+      border: `1px solid ${total === 100 ? DESIGN.colors.semantic.profit + '40' : total > 100 ? DESIGN.colors.semantic.loss + '40' : DESIGN.colors.border.subtle}`,
+    }}>
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '16px',
+      }}>
+        <span style={{
+          fontSize: DESIGN.typography.size.sm,
+          fontWeight: DESIGN.typography.weight.semibold,
+          color: DESIGN.colors.text.primary,
+          textTransform: 'uppercase',
+          letterSpacing: DESIGN.typography.letterSpacing.wider,
+        }}>
+          Allocation Summary
+        </span>
+        <span style={{
+          fontSize: DESIGN.typography.size.sm,
+          fontFamily: DESIGN.typography.fontFamily.mono,
+          color: total === 100 ? DESIGN.colors.semantic.profit : total > 100 ? DESIGN.colors.semantic.loss : DESIGN.colors.text.secondary,
+        }}>
+          Total: {total}% {total === 100 ? '✓' : total > 100 ? '⚠️ Over 100%' : `(${unallocated}% cash)`}
+        </span>
+      </div>
+      
+      {/* Stacked bar */}
+      <div style={{
+        height: '24px',
+        backgroundColor: DESIGN.colors.bg.surface,
+        borderRadius: DESIGN.radius.md,
+        overflow: 'hidden',
+        display: 'flex',
+      }}>
+        {STRATEGIES.map((strategy) => {
+          const allocation = allocations[strategy.id] || 0;
+          if (allocation === 0) return null;
+          return (
+            <div
+              key={strategy.id}
+              style={{
+                width: `${Math.min(allocation, 100)}%`,
+                height: '100%',
+                backgroundColor: strategy.color,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'width 0.3s ease',
+              }}
+              title={`${strategy.name}: ${allocation}%`}
+            >
+              {allocation >= 15 && (
+                <span style={{
+                  fontSize: '10px',
+                  fontWeight: DESIGN.typography.weight.bold,
+                  color: '#fff',
+                }}>
+                  {allocation}%
+                </span>
+              )}
+            </div>
+          );
+        })}
+        {unallocated > 0 && total <= 100 && (
+          <div style={{
+            width: `${unallocated}%`,
+            height: '100%',
+            backgroundColor: DESIGN.colors.bg.elevated,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}>
+            {unallocated >= 15 && (
+              <span style={{ fontSize: '10px', color: DESIGN.colors.text.tertiary }}>
+                Cash
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+      
+      {/* Legend */}
+      <div style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: '16px',
+        marginTop: '16px',
+      }}>
+        {STRATEGIES.map((strategy) => {
+          const allocation = allocations[strategy.id] || 0;
+          if (allocation === 0) return null;
+          return (
+            <div key={strategy.id} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div style={{
+                width: '12px',
+                height: '12px',
+                borderRadius: '3px',
+                backgroundColor: strategy.color,
+              }} />
+              <span style={{ fontSize: DESIGN.typography.size.xs, color: DESIGN.colors.text.secondary }}>
+                {strategy.name}: ${((allocation / 100) * botCapital).toLocaleString('en-US', { maximumFractionDigits: 0 })}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 // Animated number display
 const AnimatedValue = ({ value, prefix = '', suffix = '', color }) => {
   const [displayValue, setDisplayValue] = useState(value);
@@ -1836,6 +2087,16 @@ function App() {
     win_rate: 0
   });
 
+  // Strategy allocation state
+  const [botCapital, setBotCapital] = useState(10000);
+  const [strategyAllocations, setStrategyAllocations] = useState({
+    momentum: 25,
+    mean_reversion: 50,
+    rsi: 15,
+    vwap: 10,
+  });
+  const [tradingSubTab, setTradingSubTab] = useState('positions');
+
   const [recommendations, setRecommendations] = useState([]);
   const [loadingIntelligence, setLoadingIntelligence] = useState(false);
 
@@ -2007,8 +2268,7 @@ function App() {
   // Navigation tabs
   const navTabs = [
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
-    { id: 'trading', label: 'Trading', icon: Activity },
-    { id: 'bot', label: 'Auto-Trade', icon: Bot },
+    { id: 'trading', label: 'Trading Terminal', icon: Activity },
     { id: 'research', label: 'Intelligence', icon: Crosshair },
     { id: 'analytics', label: 'Analytics', icon: PieChart },
   ];
@@ -2460,393 +2720,710 @@ function App() {
                 </div>
               )}
 
-              {/* Trading */}
+
+              {/* Trading Terminal */}
               {activeTab === 'trading' && (
-                <div style={{ 
-                  display: 'grid', 
-                  gridTemplateColumns: '400px 1fr',
-                  gap: '24px',
-                  animation: 'fadeIn 0.3s ease',
-                }}>
-                  {/* Order Form */}
-                  <Card>
-                    <SectionHeader icon={Activity} title="Place Order" />
-                    
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                      <div>
-                        <label style={{
-                          display: 'block',
-                          fontSize: DESIGN.typography.size.xs,
-                          color: DESIGN.colors.text.tertiary,
-                          textTransform: 'uppercase',
-                          letterSpacing: DESIGN.typography.letterSpacing.wider,
-                          marginBottom: '6px',
-                        }}>
-                          Symbol
-                        </label>
-                        <input
-                          type="text"
-                          value={orderForm.symbol}
-                          onChange={(e) => setOrderForm(p => ({ ...p, symbol: e.target.value.toUpperCase() }))}
-                          placeholder="AAPL"
-                          style={{
-                            width: '100%',
-                            padding: '12px 16px',
-                            backgroundColor: DESIGN.colors.bg.surface,
-                            border: `1px solid ${DESIGN.colors.border.default}`,
-                            borderRadius: DESIGN.radius.md,
-                            color: DESIGN.colors.text.primary,
-                            fontSize: DESIGN.typography.size.base,
-                            fontFamily: DESIGN.typography.fontFamily.mono,
-                            outline: 'none',
-                          }}
-                        />
+                <div style={{ animation: 'fadeIn 0.3s ease' }}>
+                  {/* Portfolio Summary Bar */}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(4, 1fr)',
+                    gap: '16px',
+                    marginBottom: '24px',
+                  }}>
+                    <Card style={{ padding: '20px' }}>
+                      <div style={{
+                        fontSize: DESIGN.typography.size.xs,
+                        color: DESIGN.colors.text.tertiary,
+                        textTransform: 'uppercase',
+                        letterSpacing: DESIGN.typography.letterSpacing.wider,
+                        marginBottom: '8px',
+                      }}>
+                        Portfolio Value
                       </div>
-
-                      <Button onClick={handleGetQuote} variant="secondary" style={{ width: '100%' }}>
-                        Get Quote
-                      </Button>
-
-                      {quote && (
-                        <div style={{
-                          padding: '16px',
-                          backgroundColor: DESIGN.colors.bg.surface,
-                          borderRadius: DESIGN.radius.md,
-                          border: `1px solid ${DESIGN.colors.brand.primary}30`,
-                        }}>
+                      <div style={{
+                        fontSize: DESIGN.typography.size['2xl'],
+                        fontWeight: DESIGN.typography.weight.bold,
+                        fontFamily: DESIGN.typography.fontFamily.mono,
+                        color: DESIGN.colors.text.primary,
+                      }}>
+                        {formatCurrency(account?.portfolio_value || 0)}
+                      </div>
+                    </Card>
+                    
+                    <Card style={{ padding: '20px' }}>
+                      <div style={{
+                        fontSize: DESIGN.typography.size.xs,
+                        color: DESIGN.colors.text.tertiary,
+                        textTransform: 'uppercase',
+                        letterSpacing: DESIGN.typography.letterSpacing.wider,
+                        marginBottom: '8px',
+                      }}>
+                        Buying Power
+                      </div>
+                      <div style={{
+                        fontSize: DESIGN.typography.size['2xl'],
+                        fontWeight: DESIGN.typography.weight.bold,
+                        fontFamily: DESIGN.typography.fontFamily.mono,
+                        color: DESIGN.colors.brand.primary,
+                      }}>
+                        {formatCurrency(account?.buying_power || 0)}
+                      </div>
+                    </Card>
+                    
+                    <Card style={{ padding: '20px' }}>
+                      <div style={{
+                        fontSize: DESIGN.typography.size.xs,
+                        color: DESIGN.colors.text.tertiary,
+                        textTransform: 'uppercase',
+                        letterSpacing: DESIGN.typography.letterSpacing.wider,
+                        marginBottom: '8px',
+                      }}>
+                        Today's P&L
+                      </div>
+                      <div style={{
+                        fontSize: DESIGN.typography.size['2xl'],
+                        fontWeight: DESIGN.typography.weight.bold,
+                        fontFamily: DESIGN.typography.fontFamily.mono,
+                        color: (account?.equity - account?.last_equity) >= 0 ? DESIGN.colors.semantic.profit : DESIGN.colors.semantic.loss,
+                      }}>
+                        {formatCurrency((account?.equity || 0) - (account?.last_equity || 0))}
+                      </div>
+                    </Card>
+                    
+                    <Card style={{ padding: '20px' }}>
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'flex-start',
+                      }}>
+                        <div>
+                          <div style={{
+                            fontSize: DESIGN.typography.size.xs,
+                            color: DESIGN.colors.text.tertiary,
+                            textTransform: 'uppercase',
+                            letterSpacing: DESIGN.typography.letterSpacing.wider,
+                            marginBottom: '8px',
+                          }}>
+                            Auto-Trade Bot
+                          </div>
                           <div style={{
                             fontSize: DESIGN.typography.size.xl,
                             fontWeight: DESIGN.typography.weight.bold,
-                            fontFamily: DESIGN.typography.fontFamily.mono,
-                            color: DESIGN.colors.brand.primary,
-                            marginBottom: '8px',
+                            color: botStatus.running ? DESIGN.colors.semantic.profit : DESIGN.colors.text.tertiary,
                           }}>
-                            {quote.symbol}
-                          </div>
-                          <div style={{ display: 'flex', gap: '16px', fontSize: DESIGN.typography.size.sm }}>
-                            <span style={{ color: DESIGN.colors.semantic.profit }}>
-                              Bid: {formatCurrency(quote.bid)}
-                            </span>
-                            <span style={{ color: DESIGN.colors.semantic.loss }}>
-                              Ask: {formatCurrency(quote.ask)}
-                            </span>
+                            {botStatus.running ? '● ACTIVE' : '○ STOPPED'}
                           </div>
                         </div>
-                      )}
-
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                        <div>
-                          <label style={{
-                            display: 'block',
-                            fontSize: DESIGN.typography.size.xs,
-                            color: DESIGN.colors.text.tertiary,
-                            textTransform: 'uppercase',
-                            letterSpacing: DESIGN.typography.letterSpacing.wider,
-                            marginBottom: '6px',
-                          }}>
-                            Quantity
-                          </label>
-                          <input
-                            type="number"
-                            value={orderForm.qty}
-                            onChange={(e) => setOrderForm(p => ({ ...p, qty: e.target.value }))}
-                            min="1"
-                            style={{
-                              width: '100%',
-                              padding: '12px 16px',
-                              backgroundColor: DESIGN.colors.bg.surface,
-                              border: `1px solid ${DESIGN.colors.border.default}`,
-                              borderRadius: DESIGN.radius.md,
-                              color: DESIGN.colors.text.primary,
-                              fontSize: DESIGN.typography.size.base,
-                              fontFamily: DESIGN.typography.fontFamily.mono,
-                              outline: 'none',
-                            }}
-                          />
-                        </div>
-                        <div>
-                          <label style={{
-                            display: 'block',
-                            fontSize: DESIGN.typography.size.xs,
-                            color: DESIGN.colors.text.tertiary,
-                            textTransform: 'uppercase',
-                            letterSpacing: DESIGN.typography.letterSpacing.wider,
-                            marginBottom: '6px',
-                          }}>
-                            Type
-                          </label>
-                          <select
-                            value={orderForm.orderType}
-                            onChange={(e) => setOrderForm(p => ({ ...p, orderType: e.target.value }))}
-                            style={{
-                              width: '100%',
-                              padding: '12px 16px',
-                              backgroundColor: DESIGN.colors.bg.surface,
-                              border: `1px solid ${DESIGN.colors.border.default}`,
-                              borderRadius: DESIGN.radius.md,
-                              color: DESIGN.colors.text.primary,
-                              fontSize: DESIGN.typography.size.base,
-                              outline: 'none',
-                            }}
-                          >
-                            <option value="market">Market</option>
-                            <option value="limit">Limit</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      {orderForm.orderType === 'limit' && (
-                        <div>
-                          <label style={{
-                            display: 'block',
-                            fontSize: DESIGN.typography.size.xs,
-                            color: DESIGN.colors.text.tertiary,
-                            textTransform: 'uppercase',
-                            letterSpacing: DESIGN.typography.letterSpacing.wider,
-                            marginBottom: '6px',
-                          }}>
-                            Limit Price
-                          </label>
-                          <input
-                            type="number"
-                            value={orderForm.limitPrice}
-                            onChange={(e) => setOrderForm(p => ({ ...p, limitPrice: e.target.value }))}
-                            step="0.01"
-                            style={{
-                              width: '100%',
-                              padding: '12px 16px',
-                              backgroundColor: DESIGN.colors.bg.surface,
-                              border: `1px solid ${DESIGN.colors.border.default}`,
-                              borderRadius: DESIGN.radius.md,
-                              color: DESIGN.colors.text.primary,
-                              fontSize: DESIGN.typography.size.base,
-                              fontFamily: DESIGN.typography.fontFamily.mono,
-                              outline: 'none',
-                            }}
-                          />
-                        </div>
-                      )}
-
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                        <Button 
-                          variant="success" 
-                          style={{ width: '100%' }}
-                          onClick={() => { setOrderForm(p => ({ ...p, side: 'buy' })); handlePlaceOrder(); }}
-                        >
-                          Buy
-                        </Button>
-                        <Button 
-                          variant="danger" 
-                          style={{ width: '100%' }}
-                          onClick={() => { setOrderForm(p => ({ ...p, side: 'sell' })); handlePlaceOrder(); }}
-                        >
-                          Sell
-                        </Button>
-                      </div>
-                    </div>
-                  </Card>
-
-                  {/* Orders */}
-                  <Card>
-                    <SectionHeader icon={Layers} title={`Open Orders (${orders.length})`} />
-                    {orders.length > 0 ? (
-                      <div style={{ overflowX: 'auto' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                          <thead>
-                            <tr>
-                              {['Symbol', 'Side', 'Type', 'Qty', 'Status', 'Created'].map(h => (
-                                <th key={h} style={{
-                                  padding: '12px 16px',
-                                  textAlign: 'left',
-                                  fontSize: DESIGN.typography.size.xs,
-                                  fontWeight: DESIGN.typography.weight.semibold,
-                                  color: DESIGN.colors.text.tertiary,
-                                  textTransform: 'uppercase',
-                                  letterSpacing: DESIGN.typography.letterSpacing.wider,
-                                  borderBottom: `1px solid ${DESIGN.colors.border.subtle}`,
-                                }}>
-                                  {h}
-                                </th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {orders.map((order, idx) => (
-                              <tr key={idx} style={{ borderBottom: `1px solid ${DESIGN.colors.border.subtle}` }}>
-                                <td style={{ padding: '16px', fontWeight: DESIGN.typography.weight.semibold, color: DESIGN.colors.brand.primary }}>
-                                  {order.symbol}
-                                </td>
-                                <td style={{ 
-                                  padding: '16px',
-                                  color: order.side === 'buy' ? DESIGN.colors.semantic.profit : DESIGN.colors.semantic.loss,
-                                  fontWeight: DESIGN.typography.weight.semibold,
-                                  textTransform: 'uppercase',
-                                }}>
-                                  {order.side}
-                                </td>
-                                <td style={{ padding: '16px', textTransform: 'capitalize' }}>{order.type}</td>
-                                <td style={{ padding: '16px', fontFamily: DESIGN.typography.fontFamily.mono }}>{order.qty}</td>
-                                <td style={{ padding: '16px', textTransform: 'capitalize' }}>{order.status}</td>
-                                <td style={{ padding: '16px', fontSize: DESIGN.typography.size.sm, color: DESIGN.colors.text.tertiary }}>
-                                  {formatDate(order.created_at)}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    ) : (
-                      <div style={{ textAlign: 'center', padding: '40px', color: DESIGN.colors.text.tertiary }}>
-                        No open orders
-                      </div>
-                    )}
-                  </Card>
-                </div>
-              )}
-
-              {/* Bot / Auto-Trade */}
-              {activeTab === 'bot' && (
-                <div style={{ animation: 'fadeIn 0.3s ease' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '24px', marginBottom: '24px' }}>
-                    <Card>
-                      <SectionHeader icon={Bot} title="Auto-Trade Controls" />
-                      
-                      <div style={{
-                        fontSize: DESIGN.typography.size['3xl'],
-                        fontWeight: DESIGN.typography.weight.bold,
-                        color: botStatus.running ? DESIGN.colors.semantic.profit : DESIGN.colors.text.tertiary,
-                        marginBottom: '24px',
-                      }}>
-                        {botStatus.running ? '● ACTIVE' : '○ INACTIVE'}
-                      </div>
-
-                      <div style={{ display: 'flex', gap: '12px' }}>
                         <Button
-                          variant="success"
-                          onClick={handleStartBot}
-                          disabled={botStatus.running}
-                          style={{ flex: 1 }}
+                          variant={botStatus.running ? 'danger' : 'success'}
+                          size="sm"
+                          onClick={botStatus.running ? handleStopBot : handleStartBot}
                         >
-                          Start Bot
+                          {botStatus.running ? 'Stop' : 'Start'}
                         </Button>
-                        <Button
-                          variant="danger"
-                          onClick={handleStopBot}
-                          disabled={!botStatus.running}
-                          style={{ flex: 1 }}
-                        >
-                          Stop Bot
-                        </Button>
-                      </div>
-                    </Card>
-
-                    <Card>
-                      <SectionHeader icon={Target} title="Strategy Configuration" />
-                      
-                      <div style={{ marginBottom: '16px' }}>
-                        <label style={{
-                          display: 'block',
-                          fontSize: DESIGN.typography.size.xs,
-                          color: DESIGN.colors.text.tertiary,
-                          textTransform: 'uppercase',
-                          letterSpacing: DESIGN.typography.letterSpacing.wider,
-                          marginBottom: '6px',
-                        }}>
-                          Active Strategy
-                        </label>
-                        <select
-                          value={botStatus.strategy}
-                          disabled={botStatus.running}
-                          style={{
-                            width: '100%',
-                            padding: '12px 16px',
-                            backgroundColor: DESIGN.colors.bg.surface,
-                            border: `1px solid ${DESIGN.colors.border.default}`,
-                            borderRadius: DESIGN.radius.md,
-                            color: DESIGN.colors.text.primary,
-                            fontSize: DESIGN.typography.size.base,
-                            outline: 'none',
-                            opacity: botStatus.running ? 0.5 : 1,
-                          }}
-                        >
-                          <option value="momentum">Momentum</option>
-                          <option value="mean_reversion">Mean Reversion</option>
-                          <option value="rsi">RSI</option>
-                          <option value="ma_crossover">MA Crossover</option>
-                        </select>
-                      </div>
-
-                      <div style={{
-                        padding: '12px',
-                        backgroundColor: DESIGN.colors.bg.surface,
-                        borderRadius: DESIGN.radius.md,
-                        fontSize: DESIGN.typography.size.sm,
-                        color: DESIGN.colors.text.secondary,
-                      }}>
-                        <div>Stop Loss: <span style={{ color: DESIGN.colors.semantic.loss }}>-2%</span></div>
-                        <div>Take Profit: <span style={{ color: DESIGN.colors.semantic.profit }}>+5%</span></div>
-                        <div>Check Interval: 60s</div>
                       </div>
                     </Card>
                   </div>
+                  
+                  {/* Main Content Grid */}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: '340px 1fr',
+                    gap: '24px',
+                  }}>
+                    {/* Left Column - Quick Trade + Bot Status */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                      {/* Quick Trade Panel */}
+                      <Card>
+                        <SectionHeader icon={Activity} title="Quick Trade" />
+                        
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                          <div>
+                            <label style={{
+                              display: 'block',
+                              fontSize: DESIGN.typography.size.xs,
+                              color: DESIGN.colors.text.tertiary,
+                              textTransform: 'uppercase',
+                              letterSpacing: DESIGN.typography.letterSpacing.wider,
+                              marginBottom: '6px',
+                            }}>
+                              Symbol
+                            </label>
+                            <input
+                              type="text"
+                              value={orderForm.symbol}
+                              onChange={(e) => setOrderForm(p => ({ ...p, symbol: e.target.value.toUpperCase() }))}
+                              placeholder="AAPL"
+                              style={{
+                                width: '100%',
+                                padding: '12px 16px',
+                                backgroundColor: DESIGN.colors.bg.surface,
+                                border: `1px solid ${DESIGN.colors.border.default}`,
+                                borderRadius: DESIGN.radius.md,
+                                color: DESIGN.colors.text.primary,
+                                fontSize: DESIGN.typography.size.base,
+                                fontFamily: DESIGN.typography.fontFamily.mono,
+                                outline: 'none',
+                              }}
+                            />
+                          </div>
 
-                  {/* Recent Trades */}
-                  <Card>
-                    <SectionHeader icon={Activity} title={`Recent Trades (${trades.length})`} />
-                    {trades.length > 0 ? (
-                      <div style={{ overflowX: 'auto' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                          <thead>
-                            <tr>
-                              {['Time', 'Symbol', 'Side', 'Qty', 'Price', 'Status'].map(h => (
-                                <th key={h} style={{
+                          <Button onClick={handleGetQuote} variant="secondary" style={{ width: '100%' }}>
+                            Get Quote
+                          </Button>
+
+                          {quote && (
+                            <div style={{
+                              padding: '16px',
+                              backgroundColor: DESIGN.colors.bg.surface,
+                              borderRadius: DESIGN.radius.md,
+                              border: `1px solid ${DESIGN.colors.brand.primary}30`,
+                            }}>
+                              <div style={{
+                                fontSize: DESIGN.typography.size.xl,
+                                fontWeight: DESIGN.typography.weight.bold,
+                                fontFamily: DESIGN.typography.fontFamily.mono,
+                                color: DESIGN.colors.brand.primary,
+                                marginBottom: '8px',
+                              }}>
+                                {quote.symbol}
+                              </div>
+                              <div style={{ display: 'flex', gap: '16px', fontSize: DESIGN.typography.size.sm }}>
+                                <span style={{ color: DESIGN.colors.semantic.profit }}>
+                                  Bid: {formatCurrency(quote.bid)}
+                                </span>
+                                <span style={{ color: DESIGN.colors.semantic.loss }}>
+                                  Ask: {formatCurrency(quote.ask)}
+                                </span>
+                              </div>
+                            </div>
+                          )}
+
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                            <div>
+                              <label style={{
+                                display: 'block',
+                                fontSize: DESIGN.typography.size.xs,
+                                color: DESIGN.colors.text.tertiary,
+                                textTransform: 'uppercase',
+                                letterSpacing: DESIGN.typography.letterSpacing.wider,
+                                marginBottom: '6px',
+                              }}>
+                                Quantity
+                              </label>
+                              <input
+                                type="number"
+                                value={orderForm.qty}
+                                onChange={(e) => setOrderForm(p => ({ ...p, qty: e.target.value }))}
+                                min="1"
+                                style={{
+                                  width: '100%',
                                   padding: '12px 16px',
-                                  textAlign: 'left',
+                                  backgroundColor: DESIGN.colors.bg.surface,
+                                  border: `1px solid ${DESIGN.colors.border.default}`,
+                                  borderRadius: DESIGN.radius.md,
+                                  color: DESIGN.colors.text.primary,
+                                  fontSize: DESIGN.typography.size.base,
+                                  fontFamily: DESIGN.typography.fontFamily.mono,
+                                  outline: 'none',
+                                }}
+                              />
+                            </div>
+                            <div>
+                              <label style={{
+                                display: 'block',
+                                fontSize: DESIGN.typography.size.xs,
+                                color: DESIGN.colors.text.tertiary,
+                                textTransform: 'uppercase',
+                                letterSpacing: DESIGN.typography.letterSpacing.wider,
+                                marginBottom: '6px',
+                              }}>
+                                Type
+                              </label>
+                              <select
+                                value={orderForm.orderType}
+                                onChange={(e) => setOrderForm(p => ({ ...p, orderType: e.target.value }))}
+                                style={{
+                                  width: '100%',
+                                  padding: '12px 16px',
+                                  backgroundColor: DESIGN.colors.bg.surface,
+                                  border: `1px solid ${DESIGN.colors.border.default}`,
+                                  borderRadius: DESIGN.radius.md,
+                                  color: DESIGN.colors.text.primary,
+                                  fontSize: DESIGN.typography.size.base,
+                                  outline: 'none',
+                                }}
+                              >
+                                <option value="market">Market</option>
+                                <option value="limit">Limit</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          {orderForm.orderType === 'limit' && (
+                            <div>
+                              <label style={{
+                                display: 'block',
+                                fontSize: DESIGN.typography.size.xs,
+                                color: DESIGN.colors.text.tertiary,
+                                textTransform: 'uppercase',
+                                letterSpacing: DESIGN.typography.letterSpacing.wider,
+                                marginBottom: '6px',
+                              }}>
+                                Limit Price
+                              </label>
+                              <input
+                                type="number"
+                                value={orderForm.limitPrice}
+                                onChange={(e) => setOrderForm(p => ({ ...p, limitPrice: e.target.value }))}
+                                step="0.01"
+                                style={{
+                                  width: '100%',
+                                  padding: '12px 16px',
+                                  backgroundColor: DESIGN.colors.bg.surface,
+                                  border: `1px solid ${DESIGN.colors.border.default}`,
+                                  borderRadius: DESIGN.radius.md,
+                                  color: DESIGN.colors.text.primary,
+                                  fontSize: DESIGN.typography.size.base,
+                                  fontFamily: DESIGN.typography.fontFamily.mono,
+                                  outline: 'none',
+                                }}
+                              />
+                            </div>
+                          )}
+
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                            <Button 
+                              variant="success" 
+                              style={{ width: '100%' }}
+                              onClick={() => { setOrderForm(p => ({ ...p, side: 'buy' })); handlePlaceOrder(); }}
+                            >
+                              Buy
+                            </Button>
+                            <Button 
+                              variant="danger" 
+                              style={{ width: '100%' }}
+                              onClick={() => { setOrderForm(p => ({ ...p, side: 'sell' })); handlePlaceOrder(); }}
+                            >
+                              Sell
+                            </Button>
+                          </div>
+                        </div>
+                      </Card>
+                      
+                      {/* Bot Status Panel */}
+                      <Card>
+                        <SectionHeader icon={Bot} title="Bot Status" />
+                        
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                          <div style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            padding: '12px 16px',
+                            backgroundColor: botStatus.running ? DESIGN.colors.semantic.profitBg : DESIGN.colors.bg.surface,
+                            borderRadius: DESIGN.radius.md,
+                            border: `1px solid ${botStatus.running ? DESIGN.colors.semantic.profit + '40' : DESIGN.colors.border.subtle}`,
+                          }}>
+                            <span style={{ fontSize: DESIGN.typography.size.sm, color: DESIGN.colors.text.secondary }}>
+                              Status
+                            </span>
+                            <span style={{
+                              fontWeight: DESIGN.typography.weight.bold,
+                              color: botStatus.running ? DESIGN.colors.semantic.profit : DESIGN.colors.text.tertiary,
+                            }}>
+                              {botStatus.running ? '● Running' : '○ Stopped'}
+                            </span>
+                          </div>
+                          
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                            <div style={{
+                              padding: '12px',
+                              backgroundColor: DESIGN.colors.bg.surface,
+                              borderRadius: DESIGN.radius.md,
+                              textAlign: 'center',
+                            }}>
+                              <div style={{ fontSize: DESIGN.typography.size.xs, color: DESIGN.colors.text.tertiary, marginBottom: '4px' }}>
+                                Trades Today
+                              </div>
+                              <div style={{
+                                fontSize: DESIGN.typography.size.lg,
+                                fontWeight: DESIGN.typography.weight.bold,
+                                fontFamily: DESIGN.typography.fontFamily.mono,
+                              }}>
+                                {botStatus.trades_today || 0}
+                              </div>
+                            </div>
+                            <div style={{
+                              padding: '12px',
+                              backgroundColor: DESIGN.colors.bg.surface,
+                              borderRadius: DESIGN.radius.md,
+                              textAlign: 'center',
+                            }}>
+                              <div style={{ fontSize: DESIGN.typography.size.xs, color: DESIGN.colors.text.tertiary, marginBottom: '4px' }}>
+                                Win Rate
+                              </div>
+                              <div style={{
+                                fontSize: DESIGN.typography.size.lg,
+                                fontWeight: DESIGN.typography.weight.bold,
+                                fontFamily: DESIGN.typography.fontFamily.mono,
+                                color: (botStatus.win_rate || 0) >= 50 ? DESIGN.colors.semantic.profit : DESIGN.colors.semantic.loss,
+                              }}>
+                                {botStatus.win_rate || 0}%
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div style={{
+                            padding: '12px 16px',
+                            backgroundColor: DESIGN.colors.bg.surface,
+                            borderRadius: DESIGN.radius.md,
+                          }}>
+                            <div style={{ fontSize: DESIGN.typography.size.xs, color: DESIGN.colors.text.tertiary, marginBottom: '4px' }}>
+                              Bot Daily P&L
+                            </div>
+                            <div style={{
+                              fontSize: DESIGN.typography.size.xl,
+                              fontWeight: DESIGN.typography.weight.bold,
+                              fontFamily: DESIGN.typography.fontFamily.mono,
+                              color: (botStatus.daily_pnl || 0) >= 0 ? DESIGN.colors.semantic.profit : DESIGN.colors.semantic.loss,
+                            }}>
+                              {formatCurrency(botStatus.daily_pnl || 0)}
+                            </div>
+                          </div>
+                        </div>
+                      </Card>
+                    </div>
+                    
+                    {/* Right Column - Tabbed Content */}
+                    <Card style={{ padding: 0, overflow: 'hidden' }}>
+                      {/* Sub-tab Navigation */}
+                      <div style={{
+                        display: 'flex',
+                        borderBottom: `1px solid ${DESIGN.colors.border.subtle}`,
+                        backgroundColor: DESIGN.colors.bg.elevated,
+                      }}>
+                        {[
+                          { id: 'positions', label: 'Positions', count: positions.length },
+                          { id: 'orders', label: 'Orders', count: orders.length },
+                          { id: 'strategies', label: 'Strategies', count: null },
+                          { id: 'history', label: 'History', count: trades.length > 0 ? trades.length : null },
+                        ].map(tab => (
+                          <button
+                            key={tab.id}
+                            onClick={() => setTradingSubTab(tab.id)}
+                            style={{
+                              flex: 1,
+                              padding: '16px 20px',
+                              backgroundColor: 'transparent',
+                              border: 'none',
+                              borderBottom: tradingSubTab === tab.id ? `2px solid ${DESIGN.colors.brand.primary}` : '2px solid transparent',
+                              color: tradingSubTab === tab.id ? DESIGN.colors.brand.primary : DESIGN.colors.text.secondary,
+                              fontSize: DESIGN.typography.size.sm,
+                              fontWeight: DESIGN.typography.weight.semibold,
+                              cursor: 'pointer',
+                              transition: DESIGN.transition.fast,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '8px',
+                            }}
+                          >
+                            {tab.label}
+                            {tab.count !== null && tab.count > 0 && (
+                              <span style={{
+                                padding: '2px 8px',
+                                backgroundColor: tradingSubTab === tab.id ? DESIGN.colors.brand.primary : DESIGN.colors.bg.surface,
+                                color: tradingSubTab === tab.id ? '#fff' : DESIGN.colors.text.tertiary,
+                                borderRadius: DESIGN.radius.full,
+                                fontSize: DESIGN.typography.size.xs,
+                                fontFamily: DESIGN.typography.fontFamily.mono,
+                              }}>
+                                {tab.count}
+                              </span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                      
+                      {/* Tab Content */}
+                      <div style={{ padding: '20px' }}>
+                        {/* Positions Tab */}
+                        {tradingSubTab === 'positions' && (
+                          <div>
+                            {positions.length > 0 ? (
+                              <div style={{ overflowX: 'auto' }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                  <thead>
+                                    <tr>
+                                      {['Symbol', 'Qty', 'Avg Cost', 'Current', 'P&L', 'P&L %'].map(h => (
+                                        <th key={h} style={{
+                                          padding: '12px 16px',
+                                          textAlign: 'left',
+                                          fontSize: DESIGN.typography.size.xs,
+                                          fontWeight: DESIGN.typography.weight.semibold,
+                                          color: DESIGN.colors.text.tertiary,
+                                          textTransform: 'uppercase',
+                                          letterSpacing: DESIGN.typography.letterSpacing.wider,
+                                          borderBottom: `1px solid ${DESIGN.colors.border.subtle}`,
+                                        }}>
+                                          {h}
+                                        </th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {positions.map((pos, idx) => (
+                                      <tr key={idx} style={{ borderBottom: `1px solid ${DESIGN.colors.border.subtle}` }}>
+                                        <td style={{ padding: '16px', fontWeight: DESIGN.typography.weight.semibold, color: DESIGN.colors.brand.primary }}>
+                                          {pos.symbol}
+                                        </td>
+                                        <td style={{ padding: '16px', fontFamily: DESIGN.typography.fontFamily.mono }}>{pos.qty}</td>
+                                        <td style={{ padding: '16px', fontFamily: DESIGN.typography.fontFamily.mono }}>{formatCurrency(pos.avg_entry_price)}</td>
+                                        <td style={{ padding: '16px', fontFamily: DESIGN.typography.fontFamily.mono }}>{formatCurrency(pos.current_price)}</td>
+                                        <td style={{ 
+                                          padding: '16px',
+                                          fontFamily: DESIGN.typography.fontFamily.mono,
+                                          color: pos.unrealized_pl >= 0 ? DESIGN.colors.semantic.profit : DESIGN.colors.semantic.loss,
+                                        }}>
+                                          {formatCurrency(pos.unrealized_pl)}
+                                        </td>
+                                        <td style={{ 
+                                          padding: '16px',
+                                          fontFamily: DESIGN.typography.fontFamily.mono,
+                                          color: pos.unrealized_plpc >= 0 ? DESIGN.colors.semantic.profit : DESIGN.colors.semantic.loss,
+                                        }}>
+                                          {(pos.unrealized_plpc * 100).toFixed(2)}%
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            ) : (
+                              <div style={{ textAlign: 'center', padding: '60px', color: DESIGN.colors.text.tertiary }}>
+                                <Activity size={48} style={{ marginBottom: '16px', opacity: 0.3 }} />
+                                <div>No open positions</div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        
+                        {/* Orders Tab */}
+                        {tradingSubTab === 'orders' && (
+                          <div>
+                            {orders.length > 0 ? (
+                              <div style={{ overflowX: 'auto' }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                  <thead>
+                                    <tr>
+                                      {['Symbol', 'Side', 'Type', 'Qty', 'Status', 'Created'].map(h => (
+                                        <th key={h} style={{
+                                          padding: '12px 16px',
+                                          textAlign: 'left',
+                                          fontSize: DESIGN.typography.size.xs,
+                                          fontWeight: DESIGN.typography.weight.semibold,
+                                          color: DESIGN.colors.text.tertiary,
+                                          textTransform: 'uppercase',
+                                          letterSpacing: DESIGN.typography.letterSpacing.wider,
+                                          borderBottom: `1px solid ${DESIGN.colors.border.subtle}`,
+                                        }}>
+                                          {h}
+                                        </th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {orders.map((order, idx) => (
+                                      <tr key={idx} style={{ borderBottom: `1px solid ${DESIGN.colors.border.subtle}` }}>
+                                        <td style={{ padding: '16px', fontWeight: DESIGN.typography.weight.semibold, color: DESIGN.colors.brand.primary }}>
+                                          {order.symbol}
+                                        </td>
+                                        <td style={{ 
+                                          padding: '16px',
+                                          color: order.side === 'buy' ? DESIGN.colors.semantic.profit : DESIGN.colors.semantic.loss,
+                                          fontWeight: DESIGN.typography.weight.semibold,
+                                          textTransform: 'uppercase',
+                                        }}>
+                                          {order.side}
+                                        </td>
+                                        <td style={{ padding: '16px', textTransform: 'capitalize' }}>{order.type}</td>
+                                        <td style={{ padding: '16px', fontFamily: DESIGN.typography.fontFamily.mono }}>{order.qty}</td>
+                                        <td style={{ padding: '16px', textTransform: 'capitalize' }}>{order.status}</td>
+                                        <td style={{ padding: '16px', fontSize: DESIGN.typography.size.sm, color: DESIGN.colors.text.tertiary }}>
+                                          {formatDate(order.created_at)}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            ) : (
+                              <div style={{ textAlign: 'center', padding: '60px', color: DESIGN.colors.text.tertiary }}>
+                                <Layers size={48} style={{ marginBottom: '16px', opacity: 0.3 }} />
+                                <div>No open orders</div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        
+                        {/* Strategies Tab */}
+                        {tradingSubTab === 'strategies' && (
+                          <div>
+                            {/* Bot Capital Header */}
+                            <div style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              marginBottom: '24px',
+                              padding: '16px 20px',
+                              backgroundColor: DESIGN.colors.bg.surface,
+                              borderRadius: DESIGN.radius.lg,
+                              border: `1px solid ${DESIGN.colors.brand.primary}30`,
+                            }}>
+                              <div>
+                                <div style={{
                                   fontSize: DESIGN.typography.size.xs,
-                                  fontWeight: DESIGN.typography.weight.semibold,
                                   color: DESIGN.colors.text.tertiary,
                                   textTransform: 'uppercase',
                                   letterSpacing: DESIGN.typography.letterSpacing.wider,
-                                  borderBottom: `1px solid ${DESIGN.colors.border.subtle}`,
+                                  marginBottom: '4px',
                                 }}>
-                                  {h}
-                                </th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {trades.slice(0, 20).map((trade, idx) => (
-                              <tr key={idx} style={{ borderBottom: `1px solid ${DESIGN.colors.border.subtle}` }}>
-                                <td style={{ padding: '16px', fontSize: DESIGN.typography.size.sm, color: DESIGN.colors.text.tertiary }}>
-                                  {formatDate(trade.created_at)}
-                                </td>
-                                <td style={{ padding: '16px', fontWeight: DESIGN.typography.weight.semibold, color: DESIGN.colors.brand.primary }}>
-                                  {trade.symbol}
-                                </td>
-                                <td style={{ 
-                                  padding: '16px',
-                                  color: trade.side === 'buy' ? DESIGN.colors.semantic.profit : DESIGN.colors.semantic.loss,
-                                  fontWeight: DESIGN.typography.weight.semibold,
-                                  textTransform: 'uppercase',
+                                  Bot Capital Allocation
+                                </div>
+                                <div style={{
+                                  fontSize: DESIGN.typography.size['2xl'],
+                                  fontWeight: DESIGN.typography.weight.bold,
+                                  fontFamily: DESIGN.typography.fontFamily.mono,
+                                  color: DESIGN.colors.brand.primary,
                                 }}>
-                                  {trade.side}
-                                </td>
-                                <td style={{ padding: '16px', fontFamily: DESIGN.typography.fontFamily.mono }}>{trade.qty}</td>
-                                <td style={{ padding: '16px', fontFamily: DESIGN.typography.fontFamily.mono }}>
-                                  {trade.price > 0 ? formatCurrency(trade.price) : 'Market'}
-                                </td>
-                                <td style={{ padding: '16px', textTransform: 'capitalize' }}>{trade.status}</td>
-                              </tr>
+                                  ${botCapital.toLocaleString('en-US')}
+                                </div>
+                              </div>
+                              <Button variant="secondary" size="sm">
+                                Edit Amount
+                              </Button>
+                            </div>
+                            
+                            {/* Strategy Sliders */}
+                            {STRATEGIES.map(strategy => (
+                              <AllocationSlider
+                                key={strategy.id}
+                                strategy={strategy}
+                                allocation={strategyAllocations[strategy.id] || 0}
+                                onChange={(value) => setStrategyAllocations(prev => ({ ...prev, [strategy.id]: value }))}
+                                disabled={botStatus.running}
+                                botCapital={botCapital}
+                              />
                             ))}
-                          </tbody>
-                        </table>
+                            
+                            {/* Allocation Summary */}
+                            <div style={{ marginTop: '24px' }}>
+                              <AllocationSummary allocations={strategyAllocations} botCapital={botCapital} />
+                            </div>
+                            
+                            {/* Action Buttons */}
+                            <div style={{
+                              display: 'flex',
+                              gap: '12px',
+                              marginTop: '24px',
+                            }}>
+                              <Button
+                                variant="primary"
+                                style={{ flex: 1 }}
+                                disabled={Object.values(strategyAllocations).reduce((a, b) => a + b, 0) > 100}
+                              >
+                                Save Allocation
+                              </Button>
+                              <Button
+                                variant={botStatus.running ? 'danger' : 'success'}
+                                style={{ flex: 1 }}
+                                onClick={botStatus.running ? handleStopBot : handleStartBot}
+                                disabled={Object.values(strategyAllocations).reduce((a, b) => a + b, 0) > 100}
+                              >
+                                {botStatus.running ? 'Stop Bot' : 'Start Bot'}
+                              </Button>
+                            </div>
+                            
+                            {botStatus.running && (
+                              <div style={{
+                                marginTop: '16px',
+                                padding: '12px 16px',
+                                backgroundColor: DESIGN.colors.accent.amberGlow,
+                                borderRadius: DESIGN.radius.md,
+                                fontSize: DESIGN.typography.size.sm,
+                                color: DESIGN.colors.accent.amber,
+                                textAlign: 'center',
+                              }}>
+                                ⚠️ Stop the bot to modify strategy allocations
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        
+                        {/* History Tab */}
+                        {tradingSubTab === 'history' && (
+                          <div>
+                            {trades.length > 0 ? (
+                              <div style={{ overflowX: 'auto' }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                  <thead>
+                                    <tr>
+                                      {['Time', 'Symbol', 'Side', 'Qty', 'Price', 'Status'].map(h => (
+                                        <th key={h} style={{
+                                          padding: '12px 16px',
+                                          textAlign: 'left',
+                                          fontSize: DESIGN.typography.size.xs,
+                                          fontWeight: DESIGN.typography.weight.semibold,
+                                          color: DESIGN.colors.text.tertiary,
+                                          textTransform: 'uppercase',
+                                          letterSpacing: DESIGN.typography.letterSpacing.wider,
+                                          borderBottom: `1px solid ${DESIGN.colors.border.subtle}`,
+                                        }}>
+                                          {h}
+                                        </th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {trades.slice(0, 50).map((trade, idx) => (
+                                      <tr key={idx} style={{ borderBottom: `1px solid ${DESIGN.colors.border.subtle}` }}>
+                                        <td style={{ padding: '16px', fontSize: DESIGN.typography.size.sm, color: DESIGN.colors.text.tertiary }}>
+                                          {formatDate(trade.created_at)}
+                                        </td>
+                                        <td style={{ padding: '16px', fontWeight: DESIGN.typography.weight.semibold, color: DESIGN.colors.brand.primary }}>
+                                          {trade.symbol}
+                                        </td>
+                                        <td style={{ 
+                                          padding: '16px',
+                                          color: trade.side === 'buy' ? DESIGN.colors.semantic.profit : DESIGN.colors.semantic.loss,
+                                          fontWeight: DESIGN.typography.weight.semibold,
+                                          textTransform: 'uppercase',
+                                        }}>
+                                          {trade.side}
+                                        </td>
+                                        <td style={{ padding: '16px', fontFamily: DESIGN.typography.fontFamily.mono }}>{trade.qty}</td>
+                                        <td style={{ padding: '16px', fontFamily: DESIGN.typography.fontFamily.mono }}>
+                                          {trade.price > 0 ? formatCurrency(trade.price) : 'Market'}
+                                        </td>
+                                        <td style={{ padding: '16px', textTransform: 'capitalize' }}>{trade.status}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            ) : (
+                              <div style={{ textAlign: 'center', padding: '60px', color: DESIGN.colors.text.tertiary }}>
+                                <Clock size={48} style={{ marginBottom: '16px', opacity: 0.3 }} />
+                                <div>No trade history yet</div>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
-                    ) : (
-                      <div style={{ textAlign: 'center', padding: '40px', color: DESIGN.colors.text.tertiary }}>
-                        No trades yet
-                      </div>
-                    )}
-                  </Card>
+                    </Card>
+                  </div>
                 </div>
               )}
 
