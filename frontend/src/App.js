@@ -727,9 +727,14 @@ const IntelligenceCommandCenter = () => {
       setLoading(true);
       setError(null);
 
-      const [signalsRes, statsRes] = await Promise.all([
+      // Fetch signals, stats, and items by source type in parallel
+      const [signalsRes, statsRes, marketsRes, redditRes, newsRes, socialRes] = await Promise.all([
         fetch(`${RESEARCH_API}/signals`),
         fetch(`${RESEARCH_API}/stats`),
+        fetch(`${RESEARCH_API}/items?source_type=prediction_market&limit=100`),
+        fetch(`${RESEARCH_API}/items?source_type=reddit&limit=100`),
+        fetch(`${RESEARCH_API}/items?source_type=news&limit=100`),
+        fetch(`${RESEARCH_API}/items?source_type=social_media&limit=100`),
       ]);
 
       if (signalsRes.ok) {
@@ -742,17 +747,41 @@ const IntelligenceCommandCenter = () => {
         setStats(data);
       }
 
-      const itemsUrl = selectedCategory === 'all' 
-        ? `${RESEARCH_API}/items?limit=200`
-        : `${RESEARCH_API}/items/${selectedCategory}?limit=200`;
+      // Combine all items from different sources
+      const allItems = [];
+      let debugCounts = { markets: 0, reddit: 0, news: 0, social: 0 };
       
-      const itemsRes = await fetch(itemsUrl);
-      if (itemsRes.ok) {
-        const data = await itemsRes.json();
-        setItems(data.items || []);
+      if (marketsRes.ok) {
+        const data = await marketsRes.json();
+        debugCounts.markets = data.items?.length || 0;
+        allItems.push(...(data.items || []));
       }
+      
+      if (redditRes.ok) {
+        const data = await redditRes.json();
+        debugCounts.reddit = data.items?.length || 0;
+        allItems.push(...(data.items || []));
+      }
+      
+      if (newsRes.ok) {
+        const data = await newsRes.json();
+        debugCounts.news = data.items?.length || 0;
+        allItems.push(...(data.items || []));
+      }
+      
+      if (socialRes.ok) {
+        const data = await socialRes.json();
+        debugCounts.social = data.items?.length || 0;
+        allItems.push(...(data.items || []));
+      }
+
+      // Debug: Log what we got from each source
+      console.log('Items by source:', { ...debugCounts, total: allItems.length });
+
+      setItems(allItems);
     } catch (err) {
       setError('Failed to fetch intelligence data');
+      console.error('Fetch error:', err);
     } finally {
       setLoading(false);
     }
@@ -810,6 +839,12 @@ const IntelligenceCommandCenter = () => {
       social: [],
     };
 
+    // Debug: log unique source types
+    const sourceTypesFound = [...new Set(items.map(i => i.source_type))];
+    const sourceNamesFound = [...new Set(items.map(i => i.source_name))];
+    console.log('Source types in data:', sourceTypesFound);
+    console.log('Source names sample:', sourceNamesFound.slice(0, 20));
+
     items.forEach(item => {
       if (sourceTypes.markets.match(item)) {
         categorized.markets.push(item);
@@ -823,6 +858,13 @@ const IntelligenceCommandCenter = () => {
         // Default to reddit for unknown
         categorized.reddit.push(item);
       }
+    });
+
+    console.log('Categorized counts:', {
+      markets: categorized.markets.length,
+      reddit: categorized.reddit.length,
+      news: categorized.news.length,
+      social: categorized.social.length,
     });
 
     return categorized;
