@@ -291,6 +291,234 @@ const NewBadge = () => (
   </span>
 );
 
+// Collection Progress Modal - Shows detailed progress during data collection
+const CollectionProgressModal = ({ progress, isVisible }) => {
+  if (!isVisible || !progress) return null;
+  
+  const collectors = [
+    { key: 'reddit', icon: '📱', label: 'Reddit' },
+    { key: 'news', icon: '📰', label: 'News' },
+    { key: 'prediction_markets', icon: '🎯', label: 'Prediction Markets' },
+    { key: 'polymarket', icon: '💰', label: 'Polymarket' },
+    { key: 'kalshi', icon: '🏛️', label: 'Kalshi' },
+    { key: 'social', icon: '📊', label: 'Social & Sentiment' },
+  ];
+  
+  const getStatusIcon = (status) => {
+    switch (status) {
+      case 'complete': return '✅';
+      case 'running': return '⏳';
+      case 'error': return '❌';
+      default: return '⬚';
+    }
+  };
+  
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'complete': return DESIGN.colors.semantic.profit;
+      case 'running': return DESIGN.colors.brand.primary;
+      case 'error': return DESIGN.colors.semantic.loss;
+      default: return DESIGN.colors.text.tertiary;
+    }
+  };
+  
+  const completedCount = progress.completed_count || 0;
+  const totalCount = progress.total_count || 6;
+  const percentComplete = progress.percent_complete || 0;
+  const totalItems = progress.total_items || 0;
+  
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.8)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 1000,
+      backdropFilter: 'blur(4px)',
+    }}>
+      <div style={{
+        backgroundColor: DESIGN.colors.bg.elevated,
+        borderRadius: DESIGN.radius.xl,
+        border: `1px solid ${DESIGN.colors.border.subtle}`,
+        padding: '32px 40px',
+        minWidth: '420px',
+        maxWidth: '500px',
+        boxShadow: `0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 40px ${DESIGN.colors.brand.primary}20`,
+      }}>
+        {/* Header */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          marginBottom: '24px',
+        }}>
+          <div style={{
+            width: 48,
+            height: 48,
+            borderRadius: DESIGN.radius.lg,
+            background: `linear-gradient(135deg, ${DESIGN.colors.brand.primary}20 0%, ${DESIGN.colors.brand.secondary}20 100%)`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            border: `1px solid ${DESIGN.colors.brand.primary}30`,
+          }}>
+            <RefreshCw 
+              size={24} 
+              color={DESIGN.colors.brand.primary}
+              style={{
+                animation: 'spin 1s linear infinite',
+              }}
+            />
+          </div>
+          <div>
+            <h3 style={{
+              margin: 0,
+              fontSize: DESIGN.typography.size.lg,
+              fontWeight: DESIGN.typography.weight.bold,
+              color: DESIGN.colors.text.primary,
+              fontFamily: DESIGN.typography.fontFamily.display,
+            }}>
+              Collecting Intelligence
+            </h3>
+            <p style={{
+              margin: 0,
+              fontSize: DESIGN.typography.size.sm,
+              color: DESIGN.colors.text.tertiary,
+            }}>
+              {totalItems > 0 ? `${totalItems.toLocaleString()} items collected` : 'Initializing collectors...'}
+            </p>
+          </div>
+        </div>
+        
+        {/* Progress Steps */}
+        <div style={{ marginBottom: '24px' }}>
+          {collectors.map((collector, idx) => {
+            const collectorProgress = progress.progress?.[collector.key] || { status: 'pending', count: 0 };
+            const status = collectorProgress.status;
+            const count = collectorProgress.count || 0;
+            
+            return (
+              <div 
+                key={collector.key}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: '10px 12px',
+                  marginBottom: '4px',
+                  borderRadius: DESIGN.radius.md,
+                  backgroundColor: status === 'running' 
+                    ? `${DESIGN.colors.brand.primary}10` 
+                    : 'transparent',
+                  border: status === 'running' 
+                    ? `1px solid ${DESIGN.colors.brand.primary}30`
+                    : '1px solid transparent',
+                  transition: DESIGN.transition.fast,
+                }}
+              >
+                <span style={{ 
+                  fontSize: '18px', 
+                  marginRight: '12px',
+                  opacity: status === 'pending' ? 0.4 : 1,
+                }}>
+                  {collector.icon}
+                </span>
+                <span style={{
+                  flex: 1,
+                  fontSize: DESIGN.typography.size.sm,
+                  fontWeight: status === 'running' ? DESIGN.typography.weight.semibold : DESIGN.typography.weight.medium,
+                  color: status === 'pending' 
+                    ? DESIGN.colors.text.tertiary 
+                    : DESIGN.colors.text.primary,
+                }}>
+                  {collector.label}
+                </span>
+                {count > 0 && (
+                  <span style={{
+                    fontSize: DESIGN.typography.size.xs,
+                    color: DESIGN.colors.text.secondary,
+                    fontFamily: DESIGN.typography.fontFamily.mono,
+                    marginRight: '12px',
+                  }}>
+                    {count} items
+                  </span>
+                )}
+                <span style={{
+                  fontSize: '16px',
+                  color: getStatusColor(status),
+                }}>
+                  {getStatusIcon(status)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+        
+        {/* Progress Bar */}
+        <div style={{ marginBottom: '16px' }}>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            marginBottom: '8px',
+          }}>
+            <span style={{
+              fontSize: DESIGN.typography.size.xs,
+              color: DESIGN.colors.text.tertiary,
+              textTransform: 'uppercase',
+              letterSpacing: DESIGN.typography.letterSpacing.wider,
+            }}>
+              Progress
+            </span>
+            <span style={{
+              fontSize: DESIGN.typography.size.xs,
+              color: DESIGN.colors.text.secondary,
+              fontFamily: DESIGN.typography.fontFamily.mono,
+            }}>
+              {completedCount}/{totalCount} sources
+            </span>
+          </div>
+          <div style={{
+            height: '8px',
+            backgroundColor: DESIGN.colors.bg.surface,
+            borderRadius: DESIGN.radius.full,
+            overflow: 'hidden',
+          }}>
+            <div style={{
+              height: '100%',
+              width: `${percentComplete}%`,
+              background: `linear-gradient(90deg, ${DESIGN.colors.brand.primary} 0%, ${DESIGN.colors.brand.secondary} 100%)`,
+              borderRadius: DESIGN.radius.full,
+              transition: 'width 0.5s ease-out',
+            }} />
+          </div>
+        </div>
+        
+        {/* Footer hint */}
+        <p style={{
+          margin: 0,
+          fontSize: DESIGN.typography.size.xs,
+          color: DESIGN.colors.text.tertiary,
+          textAlign: 'center',
+        }}>
+          This typically takes 60-90 seconds
+        </p>
+      </div>
+      
+      {/* CSS for spin animation */}
+      <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
+    </div>
+  );
+};
+
 // Animated number display
 const AnimatedValue = ({ value, prefix = '', suffix = '', color }) => {
   const [displayValue, setDisplayValue] = useState(value);
@@ -683,6 +911,7 @@ const IntelligenceCommandCenter = () => {
   const [stats, setStats] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [isCollecting, setIsCollecting] = useState(false);
+  const [collectionProgress, setCollectionProgress] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -795,15 +1024,44 @@ const IntelligenceCommandCenter = () => {
 
   const runCollection = async () => {
     setIsCollecting(true);
+    setCollectionProgress(null);
+    
     try {
       const res = await fetch(`${RESEARCH_API}/collect`, { method: 'POST' });
       if (res.ok) {
-        setTimeout(fetchData, 3000);
+        // Start polling for progress
+        const pollInterval = setInterval(async () => {
+          try {
+            const statusRes = await fetch(`${RESEARCH_API}/collect/status`);
+            if (statusRes.ok) {
+              const status = await statusRes.json();
+              setCollectionProgress(status);
+              
+              // Check if collection is complete
+              if (!status.running && status.result) {
+                clearInterval(pollInterval);
+                setIsCollecting(false);
+                setCollectionProgress(null);
+                fetchData(); // Refresh data
+              }
+            }
+          } catch (err) {
+            console.error('Status poll failed:', err);
+          }
+        }, 2000); // Poll every 2 seconds
+        
+        // Safety timeout - stop polling after 3 minutes
+        setTimeout(() => {
+          clearInterval(pollInterval);
+          setIsCollecting(false);
+          setCollectionProgress(null);
+          fetchData();
+        }, 180000);
       }
     } catch (err) {
       console.error('Collection failed:', err);
-    } finally {
-      setTimeout(() => setIsCollecting(false), 3000);
+      setIsCollecting(false);
+      setCollectionProgress(null);
     }
   };
 
@@ -1221,6 +1479,12 @@ const IntelligenceCommandCenter = () => {
 
   return (
     <div>
+      {/* Collection Progress Modal */}
+      <CollectionProgressModal 
+        progress={collectionProgress} 
+        isVisible={isCollecting && collectionProgress !== null} 
+      />
+      
       {/* Header */}
       <div style={{
         display: 'flex',
