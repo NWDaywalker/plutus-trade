@@ -673,11 +673,11 @@ const TabNavSubtle = ({ tabs, activeTab, onChange }) => (
 );
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// RESEARCH DASHBOARD COMPONENT
+// ═══════════════════════════════════════════════════════════════════════════════
+// INTELLIGENCE COMMAND CENTER - Multi-Column Layout with Priority Lane
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const ResearchDashboard = () => {
-  const [activeView, setActiveView] = useState('signals');
+const IntelligenceCommandCenter = () => {
   const [signals, setSignals] = useState([]);
   const [items, setItems] = useState([]);
   const [stats, setStats] = useState(null);
@@ -693,6 +693,34 @@ const ResearchDashboard = () => {
     { id: 'crypto', label: 'Crypto', icon: Database },
     { id: 'entertainment', label: 'Entertainment', icon: Radio },
   ];
+
+  // Source type definitions for columns
+  const sourceTypes = {
+    reddit: {
+      label: 'REDDIT',
+      icon: MessageSquare,
+      color: '#FF4500',
+      match: (item) => item.source_type === 'reddit' || item.source_name?.startsWith('r/'),
+    },
+    news: {
+      label: 'NEWS',
+      icon: Globe,
+      color: '#3B82F6',
+      match: (item) => item.source_type === 'news' || ['BBC', 'NYT', 'Reuters', 'Politico', 'ESPN', 'CoinDesk', 'Variety', 'Google News', 'The Hill', 'CoinTelegraph', 'Decrypt', 'Hollywood Reporter', 'Deadline'].some(s => item.source_name?.includes(s)),
+    },
+    markets: {
+      label: 'PREDICTION MARKETS',
+      icon: TrendingUp,
+      color: '#10B981',
+      match: (item) => item.source_type === 'prediction_market' || ['Polymarket', 'Metaculus', 'Manifold', 'Kalshi'].some(s => item.source_name?.includes(s)),
+    },
+    social: {
+      label: 'SOCIAL',
+      icon: Zap,
+      color: '#8B5CF6',
+      match: (item) => item.source_type === 'social_media' || item.source_name?.startsWith('@') || item.source_name?.includes('Fear & Greed'),
+    },
+  };
 
   const fetchData = useCallback(async () => {
     try {
@@ -715,8 +743,8 @@ const ResearchDashboard = () => {
       }
 
       const itemsUrl = selectedCategory === 'all' 
-        ? `${RESEARCH_API}/items`
-        : `${RESEARCH_API}/items/${selectedCategory}`;
+        ? `${RESEARCH_API}/items?limit=200`
+        : `${RESEARCH_API}/items/${selectedCategory}?limit=200`;
       
       const itemsRes = await fetch(itemsUrl);
       if (itemsRes.ok) {
@@ -741,12 +769,12 @@ const ResearchDashboard = () => {
     try {
       const res = await fetch(`${RESEARCH_API}/collect`, { method: 'POST' });
       if (res.ok) {
-        setTimeout(fetchData, 2000);
+        setTimeout(fetchData, 3000);
       }
     } catch (err) {
       console.error('Collection failed:', err);
     } finally {
-      setIsCollecting(false);
+      setTimeout(() => setIsCollecting(false), 3000);
     }
   };
 
@@ -773,91 +801,458 @@ const ResearchDashboard = () => {
     return 1;
   };
 
-  const actualItemCount = items.length;
+  // Categorize items by source type
+  const categorizeItems = useCallback(() => {
+    const categorized = {
+      reddit: [],
+      news: [],
+      markets: [],
+      social: [],
+    };
+
+    items.forEach(item => {
+      if (sourceTypes.markets.match(item)) {
+        categorized.markets.push(item);
+      } else if (sourceTypes.social.match(item)) {
+        categorized.social.push(item);
+      } else if (sourceTypes.news.match(item)) {
+        categorized.news.push(item);
+      } else if (sourceTypes.reddit.match(item)) {
+        categorized.reddit.push(item);
+      } else {
+        // Default to reddit for unknown
+        categorized.reddit.push(item);
+      }
+    });
+
+    return categorized;
+  }, [items]);
+
+  // Get priority items (top by engagement across all sources)
+  const getPriorityItems = useCallback(() => {
+    return [...items]
+      .sort((a, b) => (b.engagement_score || 0) - (a.engagement_score || 0))
+      .slice(0, 8);
+  }, [items]);
+
+  const categorizedItems = categorizeItems();
+  const priorityItems = getPriorityItems();
+
+  // Compact item card for columns
+  const CompactItemCard = ({ item, showSource = true }) => {
+    const heatLevel = getHeatLevel(item.upvotes, item.comments);
+    const itemIsRecent = isRecent(item.timestamp);
+    const hasUrl = item.url && item.url.length > 0;
+
+    return (
+      <div style={{
+        padding: '12px',
+        backgroundColor: DESIGN.colors.bg.surface,
+        borderRadius: DESIGN.radius.md,
+        borderLeft: `3px solid ${item.sentiment > 0 ? DESIGN.colors.semantic.profit : item.sentiment < 0 ? DESIGN.colors.semantic.loss : DESIGN.colors.border.subtle}`,
+        marginBottom: '8px',
+        transition: DESIGN.transition.fast,
+      }}>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '6px',
+          gap: '8px',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', flex: 1 }}>
+            {showSource && (
+              <span style={{
+                fontSize: '10px',
+                color: DESIGN.colors.brand.primary,
+                fontWeight: DESIGN.typography.weight.bold,
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+              }}>
+                {item.source_name}
+              </span>
+            )}
+            {itemIsRecent && <NewBadge />}
+            {heatLevel >= 3 && <HeatBadge level={heatLevel} />}
+          </div>
+          <span style={{
+            fontSize: '10px',
+            color: DESIGN.colors.text.tertiary,
+            fontFamily: DESIGN.typography.fontFamily.mono,
+            whiteSpace: 'nowrap',
+          }}>
+            {formatTimeAgo(item.timestamp)}
+          </span>
+        </div>
+        
+        {hasUrl ? (
+          <a 
+            href={item.url} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            style={{
+              display: 'block',
+              fontSize: DESIGN.typography.size.xs,
+              fontWeight: DESIGN.typography.weight.medium,
+              color: DESIGN.colors.text.primary,
+              lineHeight: 1.4,
+              textDecoration: 'none',
+              marginBottom: '8px',
+            }}
+            onMouseOver={(e) => e.target.style.color = DESIGN.colors.brand.primary}
+            onMouseOut={(e) => e.target.style.color = DESIGN.colors.text.primary}
+          >
+            {item.title?.length > 80 ? item.title.substring(0, 80) + '...' : item.title}
+            <ExternalLink size={10} style={{ marginLeft: '4px', opacity: 0.5, verticalAlign: 'middle' }} />
+          </a>
+        ) : (
+          <div style={{
+            fontSize: DESIGN.typography.size.xs,
+            fontWeight: DESIGN.typography.weight.medium,
+            color: DESIGN.colors.text.primary,
+            lineHeight: 1.4,
+            marginBottom: '8px',
+          }}>
+            {item.title?.length > 80 ? item.title.substring(0, 80) + '...' : item.title}
+          </div>
+        )}
+        
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          fontSize: '10px',
+        }}>
+          <span style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '3px',
+            color: item.sentiment > 0 
+              ? DESIGN.colors.semantic.profit 
+              : item.sentiment < 0 
+                ? DESIGN.colors.semantic.loss 
+                : DESIGN.colors.text.tertiary,
+            fontWeight: DESIGN.typography.weight.semibold,
+          }}>
+            {item.sentiment > 0 ? <TrendingUp size={10} /> : item.sentiment < 0 ? <TrendingDown size={10} /> : <Minus size={10} />}
+            {item.sentiment > 0 ? 'Bull' : item.sentiment < 0 ? 'Bear' : 'Neut'}
+          </span>
+          {(item.upvotes > 0 || item.comments > 0) && (
+            <span style={{ color: DESIGN.colors.text.tertiary }}>
+              {item.upvotes > 0 && `↑${(item.upvotes / 1000).toFixed(1)}k`}
+              {item.comments > 0 && ` · ${item.comments}`}
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // Priority item card (larger, more prominent)
+  const PriorityItemCard = ({ item }) => {
+    const heatLevel = getHeatLevel(item.upvotes, item.comments);
+    const hasUrl = item.url && item.url.length > 0;
+    
+    // Determine source type for coloring
+    let sourceColor = DESIGN.colors.text.tertiary;
+    Object.values(sourceTypes).forEach(st => {
+      if (st.match(item)) sourceColor = st.color;
+    });
+
+    return (
+      <div style={{
+        padding: '16px',
+        backgroundColor: DESIGN.colors.bg.elevated,
+        borderRadius: DESIGN.radius.lg,
+        border: `1px solid ${DESIGN.colors.border.subtle}`,
+        borderTop: `3px solid ${sourceColor}`,
+        flex: '1 1 280px',
+        minWidth: '280px',
+        maxWidth: '350px',
+      }}>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '8px',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{
+              fontSize: '10px',
+              color: sourceColor,
+              fontWeight: DESIGN.typography.weight.bold,
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+            }}>
+              {item.source_name}
+            </span>
+            {heatLevel >= 3 && <HeatBadge level={heatLevel} />}
+          </div>
+          <span style={{
+            fontSize: '10px',
+            color: DESIGN.colors.text.tertiary,
+            fontFamily: DESIGN.typography.fontFamily.mono,
+          }}>
+            {formatTimeAgo(item.timestamp)}
+          </span>
+        </div>
+        
+        {hasUrl ? (
+          <a 
+            href={item.url} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            style={{
+              display: 'block',
+              fontSize: DESIGN.typography.size.sm,
+              fontWeight: DESIGN.typography.weight.semibold,
+              color: DESIGN.colors.text.primary,
+              lineHeight: 1.4,
+              textDecoration: 'none',
+              marginBottom: '12px',
+            }}
+            onMouseOver={(e) => e.target.style.color = DESIGN.colors.brand.primary}
+            onMouseOut={(e) => e.target.style.color = DESIGN.colors.text.primary}
+          >
+            {item.title?.length > 100 ? item.title.substring(0, 100) + '...' : item.title}
+            <ExternalLink size={12} style={{ marginLeft: '6px', opacity: 0.5, verticalAlign: 'middle' }} />
+          </a>
+        ) : (
+          <div style={{
+            fontSize: DESIGN.typography.size.sm,
+            fontWeight: DESIGN.typography.weight.semibold,
+            color: DESIGN.colors.text.primary,
+            lineHeight: 1.4,
+            marginBottom: '12px',
+          }}>
+            {item.title?.length > 100 ? item.title.substring(0, 100) + '...' : item.title}
+          </div>
+        )}
+        
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}>
+          <span style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '4px',
+            padding: '4px 8px',
+            borderRadius: DESIGN.radius.sm,
+            backgroundColor: item.sentiment > 0 
+              ? DESIGN.colors.semantic.profitBg
+              : item.sentiment < 0 
+                ? DESIGN.colors.semantic.lossBg
+                : DESIGN.colors.bg.surface,
+            color: item.sentiment > 0 
+              ? DESIGN.colors.semantic.profit 
+              : item.sentiment < 0 
+                ? DESIGN.colors.semantic.loss 
+                : DESIGN.colors.text.tertiary,
+            fontSize: '11px',
+            fontWeight: DESIGN.typography.weight.semibold,
+          }}>
+            {item.sentiment > 0 ? <TrendingUp size={12} /> : item.sentiment < 0 ? <TrendingDown size={12} /> : <Minus size={12} />}
+            {item.sentiment > 0 ? 'Bullish' : item.sentiment < 0 ? 'Bearish' : 'Neutral'}
+          </span>
+          
+          <span style={{ 
+            fontSize: '11px',
+            color: DESIGN.colors.text.tertiary,
+            fontFamily: DESIGN.typography.fontFamily.mono,
+          }}>
+            {item.upvotes > 0 && `↑${(item.upvotes / 1000).toFixed(1)}k`}
+            {item.comments > 0 && ` · 💬${item.comments}`}
+          </span>
+        </div>
+      </div>
+    );
+  };
+
+  // Column component
+  const SourceColumn = ({ sourceKey, items: columnItems }) => {
+    const source = sourceTypes[sourceKey];
+    const Icon = source.icon;
+    
+    return (
+      <div style={{
+        flex: '1 1 0',
+        minWidth: '250px',
+        maxWidth: '400px',
+        display: 'flex',
+        flexDirection: 'column',
+        backgroundColor: DESIGN.colors.bg.primary,
+        borderRadius: DESIGN.radius.lg,
+        border: `1px solid ${DESIGN.colors.border.subtle}`,
+        overflow: 'hidden',
+      }}>
+        {/* Column Header */}
+        <div style={{
+          padding: '12px 16px',
+          borderBottom: `1px solid ${DESIGN.colors.border.subtle}`,
+          backgroundColor: DESIGN.colors.bg.elevated,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+        }}>
+          <Icon size={16} color={source.color} />
+          <span style={{
+            fontSize: DESIGN.typography.size.xs,
+            fontWeight: DESIGN.typography.weight.bold,
+            color: DESIGN.colors.text.primary,
+            textTransform: 'uppercase',
+            letterSpacing: DESIGN.typography.letterSpacing.wider,
+          }}>
+            {source.label}
+          </span>
+          <span style={{
+            marginLeft: 'auto',
+            fontSize: '10px',
+            color: DESIGN.colors.text.tertiary,
+            fontFamily: DESIGN.typography.fontFamily.mono,
+          }}>
+            {columnItems.length}
+          </span>
+        </div>
+        
+        {/* Column Content */}
+        <div style={{
+          flex: 1,
+          overflowY: 'auto',
+          padding: '12px',
+          maxHeight: '500px',
+        }}>
+          {columnItems.length === 0 ? (
+            <div style={{
+              textAlign: 'center',
+              padding: '24px 12px',
+              color: DESIGN.colors.text.tertiary,
+              fontSize: DESIGN.typography.size.xs,
+            }}>
+              <Icon size={24} style={{ marginBottom: '8px', opacity: 0.3 }} />
+              <div>No data yet</div>
+              <div style={{ marginTop: '4px', opacity: 0.7 }}>Run a scan to collect</div>
+            </div>
+          ) : (
+            columnItems.slice(0, 20).map((item, idx) => (
+              <CompactItemCard key={idx} item={item} showSource={sourceKey === 'reddit' || sourceKey === 'news'} />
+            ))
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  if (loading) {
+    return (
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '80px 20px',
+      }}>
+        <RadarScanner size={120} scanning={true} />
+        <p style={{ 
+          color: DESIGN.colors.text.secondary, 
+          marginTop: '24px',
+          fontSize: DESIGN.typography.size.sm,
+          textTransform: 'uppercase',
+          letterSpacing: DESIGN.typography.letterSpacing.wider,
+        }}>
+          Scanning intelligence sources...
+        </p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card style={{ textAlign: 'center', padding: '60px' }}>
+        <AlertCircle size={48} color={DESIGN.colors.semantic.loss} style={{ marginBottom: '16px' }} />
+        <p style={{ color: DESIGN.colors.text.secondary, marginBottom: '16px' }}>{error}</p>
+        <Button onClick={fetchData} variant="secondary">Retry</Button>
+      </Card>
+    );
+  }
 
   return (
     <div>
-      {/* Research Header */}
+      {/* Header */}
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'flex-start',
-        marginBottom: '24px',
+        marginBottom: '20px',
         flexWrap: 'wrap',
         gap: '16px',
       }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
-            <Crosshair size={24} color={DESIGN.colors.brand.primary} />
-            <h2 style={{
-              margin: 0,
-              fontSize: DESIGN.typography.size['2xl'],
-              fontWeight: DESIGN.typography.weight.bold,
-              color: DESIGN.colors.text.primary,
-              fontFamily: DESIGN.typography.fontFamily.display,
+            <div style={{
+              width: 40,
+              height: 40,
+              borderRadius: DESIGN.radius.lg,
+              background: `linear-gradient(135deg, ${DESIGN.colors.brand.primary}20 0%, ${DESIGN.colors.brand.secondary}20 100%)`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              border: `1px solid ${DESIGN.colors.brand.primary}30`,
             }}>
-              MARKET INTELLIGENCE
-            </h2>
+              <Crosshair size={20} color={DESIGN.colors.brand.primary} />
+            </div>
+            <div>
+              <h2 style={{
+                margin: 0,
+                fontSize: DESIGN.typography.size['2xl'],
+                fontWeight: DESIGN.typography.weight.bold,
+                color: DESIGN.colors.text.primary,
+                fontFamily: DESIGN.typography.fontFamily.display,
+              }}>
+                INTELLIGENCE COMMAND CENTER
+              </h2>
+              <p style={{
+                margin: 0,
+                color: DESIGN.colors.text.tertiary,
+                fontSize: DESIGN.typography.size.sm,
+              }}>
+                Real-time signals from Reddit, News, Prediction Markets & Social
+              </p>
+            </div>
           </div>
-          <p style={{
-            margin: 0,
-            color: DESIGN.colors.text.tertiary,
-            fontSize: DESIGN.typography.size.sm,
+        </div>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          {/* Stats mini bar */}
+          <div style={{
+            display: 'flex',
+            gap: '16px',
+            padding: '8px 16px',
+            backgroundColor: DESIGN.colors.bg.elevated,
+            borderRadius: DESIGN.radius.md,
+            border: `1px solid ${DESIGN.colors.border.subtle}`,
           }}>
-            AI-synthesized signals from Reddit, news feeds, and prediction markets
-          </p>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '10px', color: DESIGN.colors.text.tertiary, textTransform: 'uppercase' }}>Items</div>
+              <div style={{ fontSize: DESIGN.typography.size.lg, fontWeight: DESIGN.typography.weight.bold, fontFamily: DESIGN.typography.fontFamily.mono, color: DESIGN.colors.text.primary }}>{items.length}</div>
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '10px', color: DESIGN.colors.text.tertiary, textTransform: 'uppercase' }}>Signals</div>
+              <div style={{ fontSize: DESIGN.typography.size.lg, fontWeight: DESIGN.typography.weight.bold, fontFamily: DESIGN.typography.fontFamily.mono, color: DESIGN.colors.brand.primary }}>{signals.length}</div>
+            </div>
+          </div>
+          
+          <Button
+            onClick={runCollection}
+            loading={isCollecting}
+            icon={isCollecting ? null : RefreshCw}
+            variant="primary"
+            size="lg"
+          >
+            {isCollecting ? 'Scanning...' : 'Run Scan'}
+          </Button>
         </div>
-        <Button
-          onClick={runCollection}
-          loading={isCollecting}
-          icon={RefreshCw}
-          variant="primary"
-        >
-          {isCollecting ? 'Scanning...' : 'Run Scan'}
-        </Button>
       </div>
-
-      {/* Stats Grid */}
-      {stats && (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
-          gap: '16px',
-          marginBottom: '24px',
-        }}>
-          {[
-            { label: 'Intelligence Items', value: stats.total_items || 0, icon: Database },
-            { label: 'Active Signals', value: stats.active_signals || 0, icon: Zap },
-            { label: 'Sources Indexed', value: stats.sources_count || 0, icon: Globe },
-            { label: 'Last Scan', value: stats.last_collection ? formatTimeAgo(stats.last_collection) : '—', icon: Clock },
-          ].map((stat, i) => (
-            <Card key={i} style={{ padding: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-                <div>
-                  <div style={{
-                    fontSize: DESIGN.typography.size.xs,
-                    color: DESIGN.colors.text.tertiary,
-                    textTransform: 'uppercase',
-                    letterSpacing: DESIGN.typography.letterSpacing.wider,
-                    marginBottom: '8px',
-                  }}>
-                    {stat.label}
-                  </div>
-                  <div style={{
-                    fontSize: DESIGN.typography.size['2xl'],
-                    fontFamily: DESIGN.typography.fontFamily.mono,
-                    fontWeight: DESIGN.typography.weight.bold,
-                    color: DESIGN.colors.text.primary,
-                  }}>
-                    {stat.value}
-                  </div>
-                </div>
-                <stat.icon size={20} color={DESIGN.colors.brand.primary} style={{ opacity: 0.5 }} />
-              </div>
-            </Card>
-          ))}
-        </div>
-      )}
 
       {/* Category Filter */}
       <div style={{
@@ -899,417 +1294,208 @@ const ResearchDashboard = () => {
         ))}
       </div>
 
-      {/* View Toggle */}
-      <div style={{ marginBottom: '24px' }}>
-        <TabNavSubtle
-          tabs={[
-            { id: 'signals', label: 'Trading Signals', icon: Zap },
-            { id: 'feed', label: 'Intelligence Feed', icon: Radio },
-          ]}
-          activeTab={activeView}
-          onChange={setActiveView}
-        />
-      </div>
-
-      {/* Content */}
-      {loading ? (
-        <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '80px 20px',
-        }}>
-          <RadarScanner size={120} scanning={true} />
-          <p style={{ 
-            color: DESIGN.colors.text.secondary, 
-            marginTop: '24px',
-            fontSize: DESIGN.typography.size.sm,
-            textTransform: 'uppercase',
-            letterSpacing: DESIGN.typography.letterSpacing.wider,
+      {/* Priority Lane */}
+      {priorityItems.length > 0 && (
+        <div style={{ marginBottom: '24px' }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            marginBottom: '12px',
           }}>
-            Scanning intelligence sources...
-          </p>
-        </div>
-      ) : error ? (
-        <Card style={{ textAlign: 'center', padding: '60px' }}>
-          <AlertCircle size={48} color={DESIGN.colors.semantic.loss} style={{ marginBottom: '16px' }} />
-          <p style={{ color: DESIGN.colors.text.secondary, marginBottom: '16px' }}>{error}</p>
-          <Button onClick={fetchData} variant="secondary">Retry</Button>
-        </Card>
-      ) : activeView === 'signals' ? (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))',
-          gap: '16px',
-        }}>
-          {signals.length === 0 ? (
-            <div style={{ 
-              gridColumn: '1 / -1',
-              backgroundColor: DESIGN.colors.bg.elevated,
-              border: `1px solid ${DESIGN.colors.border.subtle}`,
-              borderRadius: DESIGN.radius.xl,
-              padding: '60px 40px',
-              textAlign: 'center',
+            <Flame size={18} color={DESIGN.colors.brand.primary} />
+            <span style={{
+              fontSize: DESIGN.typography.size.sm,
+              fontWeight: DESIGN.typography.weight.bold,
+              color: DESIGN.colors.text.primary,
+              textTransform: 'uppercase',
+              letterSpacing: DESIGN.typography.letterSpacing.wider,
             }}>
-              <RadarScanner size={140} scanning={isCollecting} />
-              <h3 style={{ 
-                color: DESIGN.colors.text.primary, 
-                margin: '24px 0 8px 0',
-                fontSize: DESIGN.typography.size.xl,
-                fontFamily: DESIGN.typography.fontFamily.display,
-                textTransform: 'uppercase',
-                letterSpacing: DESIGN.typography.letterSpacing.wide,
-              }}>
-                {isCollecting ? 'SCANNING...' : 'AWAITING SCAN'}
-              </h3>
-              <p style={{ 
-                color: DESIGN.colors.text.tertiary, 
-                marginBottom: '24px',
-                maxWidth: '400px',
-                margin: '0 auto 24px auto',
-              }}>
-                {isCollecting 
-                  ? 'Analyzing Reddit, news feeds, and prediction markets for trading opportunities...'
-                  : 'Initialize a scan to generate AI-powered trading signals from market intelligence.'
-                }
-              </p>
-              {!isCollecting && (
-                <Button onClick={runCollection} icon={RefreshCw} size="lg">
-                  Initialize Scan
-                </Button>
-              )}
-            </div>
-          ) : (
-            signals
-              .filter(s => selectedCategory === 'all' || s.category === selectedCategory)
-              .map((signal, idx) => (
-                <Card key={idx} style={{ padding: '0', overflow: 'hidden' }}>
-                  {/* Signal Header */}
-                  <div style={{
-                    padding: '16px 20px',
-                    borderBottom: `1px solid ${DESIGN.colors.border.subtle}`,
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{
-                        fontSize: DESIGN.typography.size.xs,
-                        color: DESIGN.colors.text.tertiary,
-                        textTransform: 'uppercase',
-                        letterSpacing: DESIGN.typography.letterSpacing.wider,
-                      }}>
-                        {signal.category}
-                      </span>
-                    </div>
-                    <div style={{
-                      padding: '4px 12px',
-                      borderRadius: DESIGN.radius.full,
-                      fontSize: DESIGN.typography.size.xs,
-                      fontWeight: DESIGN.typography.weight.bold,
-                      fontFamily: DESIGN.typography.fontFamily.mono,
-                      color: '#fff',
-                      background: signal.side === 'YES' 
-                        ? DESIGN.colors.semantic.profit 
-                        : DESIGN.colors.semantic.loss,
-                      boxShadow: signal.side === 'YES'
-                        ? DESIGN.shadows.glow.profit
-                        : DESIGN.shadows.glow.loss,
-                    }}>
-                      {signal.side}
-                    </div>
-                  </div>
-                  
-                  {/* Signal Body */}
-                  <div style={{ padding: '20px' }}>
-                    <h4 style={{
-                      margin: '0 0 16px 0',
-                      fontSize: DESIGN.typography.size.base,
-                      fontWeight: DESIGN.typography.weight.semibold,
-                      color: DESIGN.colors.text.primary,
-                      lineHeight: 1.4,
-                    }}>
-                      {signal.market_question}
-                    </h4>
-                    
-                    {/* Metrics */}
-                    <div style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(3, 1fr)',
-                      gap: '16px',
-                      marginBottom: '16px',
-                    }}>
-                      <div>
-                        <div style={{
-                          fontSize: DESIGN.typography.size.xs,
-                          color: DESIGN.colors.text.tertiary,
-                          textTransform: 'uppercase',
-                          marginBottom: '4px',
-                        }}>
-                          Confidence
-                        </div>
-                        <div style={{
-                          height: '4px',
-                          background: DESIGN.colors.bg.surface,
-                          borderRadius: '2px',
-                          marginBottom: '4px',
-                          overflow: 'hidden',
-                        }}>
-                          <div style={{
-                            height: '100%',
-                            width: `${signal.confidence * 100}%`,
-                            background: signal.confidence > 0.7 
-                              ? DESIGN.colors.semantic.profit 
-                              : signal.confidence > 0.5 
-                                ? DESIGN.colors.semantic.warning 
-                                : DESIGN.colors.semantic.loss,
-                            borderRadius: '2px',
-                          }} />
-                        </div>
-                        <span style={{
-                          fontSize: DESIGN.typography.size.sm,
-                          fontFamily: DESIGN.typography.fontFamily.mono,
-                          color: DESIGN.colors.text.primary,
-                        }}>
-                          {(signal.confidence * 100).toFixed(0)}%
-                        </span>
-                      </div>
-                      
-                      <div>
-                        <div style={{
-                          fontSize: DESIGN.typography.size.xs,
-                          color: DESIGN.colors.text.tertiary,
-                          textTransform: 'uppercase',
-                          marginBottom: '4px',
-                        }}>
-                          Sentiment
-                        </div>
-                        <span style={{
-                          fontSize: DESIGN.typography.size.sm,
-                          fontFamily: DESIGN.typography.fontFamily.mono,
-                          color: signal.sentiment_score > 0 
-                            ? DESIGN.colors.semantic.profit 
-                            : signal.sentiment_score < 0 
-                              ? DESIGN.colors.semantic.loss 
-                              : DESIGN.colors.text.secondary,
-                        }}>
-                          {signal.sentiment_score > 0 ? '+' : ''}{(signal.sentiment_score * 100).toFixed(0)}%
-                        </span>
-                      </div>
-                      
-                      <div>
-                        <div style={{
-                          fontSize: DESIGN.typography.size.xs,
-                          color: DESIGN.colors.text.tertiary,
-                          textTransform: 'uppercase',
-                          marginBottom: '4px',
-                        }}>
-                          Sources
-                        </div>
-                        <span style={{
-                          fontSize: DESIGN.typography.size.sm,
-                          fontFamily: DESIGN.typography.fontFamily.mono,
-                          color: DESIGN.colors.text.primary,
-                        }}>
-                          {signal.sources_count}
-                        </span>
-                      </div>
-                    </div>
-                    
-                    {/* Reasoning */}
-                    <p style={{
-                      margin: 0,
-                      fontSize: DESIGN.typography.size.sm,
-                      color: DESIGN.colors.text.secondary,
-                      lineHeight: 1.6,
-                    }}>
-                      {signal.reasoning}
-                    </p>
-                  </div>
-                  
-                  {/* Signal Footer */}
-                  <div style={{
-                    padding: '12px 20px',
-                    borderTop: `1px solid ${DESIGN.colors.border.subtle}`,
-                    background: DESIGN.colors.bg.primary,
-                  }}>
-                    <span style={{
-                      fontSize: DESIGN.typography.size.xs,
-                      color: DESIGN.colors.text.tertiary,
-                    }}>
-                      Generated {formatTimeAgo(signal.generated_at)} ago
-                    </span>
-                  </div>
-                </Card>
-              ))
+              High Priority Signals
+            </span>
+            <span style={{
+              fontSize: '10px',
+              color: DESIGN.colors.text.tertiary,
+              fontFamily: DESIGN.typography.fontFamily.mono,
+            }}>
+              Top {priorityItems.length} by engagement
+            </span>
+          </div>
+          
+          <div style={{
+            display: 'flex',
+            gap: '16px',
+            overflowX: 'auto',
+            paddingBottom: '8px',
+          }}>
+            {priorityItems.map((item, idx) => (
+              <PriorityItemCard key={idx} item={item} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Empty State */}
+      {items.length === 0 ? (
+        <div style={{ 
+          backgroundColor: DESIGN.colors.bg.elevated,
+          border: `1px solid ${DESIGN.colors.border.subtle}`,
+          borderRadius: DESIGN.radius.xl,
+          padding: '60px 40px',
+          textAlign: 'center',
+        }}>
+          <RadarScanner size={140} scanning={isCollecting} />
+          <h3 style={{ 
+            color: DESIGN.colors.text.primary, 
+            margin: '24px 0 8px 0',
+            fontSize: DESIGN.typography.size.xl,
+            fontFamily: DESIGN.typography.fontFamily.display,
+            textTransform: 'uppercase',
+            letterSpacing: DESIGN.typography.letterSpacing.wide,
+          }}>
+            {isCollecting ? 'SCANNING...' : 'AWAITING SCAN'}
+          </h3>
+          <p style={{ 
+            color: DESIGN.colors.text.tertiary, 
+            marginBottom: '24px',
+            maxWidth: '400px',
+            margin: '0 auto 24px auto',
+          }}>
+            {isCollecting 
+              ? 'Collecting from Reddit, News, Polymarket, and Social sources...'
+              : 'Initialize a scan to populate the intelligence feeds.'
+            }
+          </p>
+          {!isCollecting && (
+            <Button onClick={runCollection} icon={RefreshCw} size="lg">
+              Initialize Scan
+            </Button>
           )}
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {items.length === 0 ? (
-            <div style={{ 
-              backgroundColor: DESIGN.colors.bg.elevated,
-              border: `1px solid ${DESIGN.colors.border.subtle}`,
-              borderRadius: DESIGN.radius.xl,
-              padding: '60px 40px',
-              textAlign: 'center',
+        /* Four Column Layout */
+        <div style={{
+          display: 'flex',
+          gap: '16px',
+          alignItems: 'flex-start',
+        }}>
+          <SourceColumn sourceKey="markets" items={categorizedItems.markets} />
+          <SourceColumn sourceKey="reddit" items={categorizedItems.reddit} />
+          <SourceColumn sourceKey="news" items={categorizedItems.news} />
+          <SourceColumn sourceKey="social" items={categorizedItems.social} />
+        </div>
+      )}
+
+      {/* Trading Signals Section */}
+      {signals.length > 0 && (
+        <div style={{ marginTop: '32px' }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            marginBottom: '16px',
+          }}>
+            <Zap size={18} color={DESIGN.colors.brand.primary} />
+            <span style={{
+              fontSize: DESIGN.typography.size.sm,
+              fontWeight: DESIGN.typography.weight.bold,
+              color: DESIGN.colors.text.primary,
+              textTransform: 'uppercase',
+              letterSpacing: DESIGN.typography.letterSpacing.wider,
             }}>
-              <RadarScanner size={140} scanning={isCollecting} />
-              <h3 style={{ 
-                color: DESIGN.colors.text.primary, 
-                margin: '24px 0 8px 0',
-                fontSize: DESIGN.typography.size.xl,
-                fontFamily: DESIGN.typography.fontFamily.display,
-                textTransform: 'uppercase',
-                letterSpacing: DESIGN.typography.letterSpacing.wide,
-              }}>
-                {isCollecting ? 'COLLECTING...' : 'NO INTELLIGENCE DATA'}
-              </h3>
-              <p style={{ 
-                color: DESIGN.colors.text.tertiary, 
-                marginBottom: '24px',
-                maxWidth: '400px',
-                margin: '0 auto 24px auto',
-              }}>
-                Run a scan to collect intelligence from Reddit, news, and prediction markets.
-              </p>
-              {!isCollecting && (
-                <Button onClick={runCollection} icon={RefreshCw} size="lg">
-                  Initialize Scan
-                </Button>
-              )}
-            </div>
-          ) : (
-            items.slice(0, 50).map((item, idx) => {
-              const heatLevel = getHeatLevel(item.upvotes, item.comments);
-              const itemIsRecent = isRecent(item.timestamp);
-              const hasUrl = item.url && item.url.length > 0;
-              
-              return (
+              Active Trading Signals
+            </span>
+          </div>
+          
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))',
+            gap: '16px',
+          }}>
+            {signals.map((signal, idx) => (
               <Card 
                 key={idx} 
-                style={{ padding: '16px' }}
-                sentiment={item.sentiment}
-                hot={heatLevel >= 3}
+                style={{ padding: '0', overflow: 'hidden' }}
+                sentiment={signal.sentiment_score}
+                glow={signal.confidence > 0.8}
               >
                 <div style={{
+                  padding: '16px 20px',
+                  borderBottom: `1px solid ${DESIGN.colors.border.subtle}`,
                   display: 'flex',
                   justifyContent: 'space-between',
-                  alignItems: 'flex-start',
-                  marginBottom: '8px',
-                  gap: '12px',
+                  alignItems: 'center',
+                  background: signal.confidence > 0.8 ? DESIGN.colors.brand.ember : 'transparent',
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                    <span style={{
-                      fontSize: DESIGN.typography.size.xs,
-                      color: DESIGN.colors.brand.primary,
-                      fontWeight: DESIGN.typography.weight.semibold,
-                      textTransform: 'uppercase',
-                      letterSpacing: DESIGN.typography.letterSpacing.wide,
-                    }}>
-                      {item.source_name}
-                    </span>
-                    {itemIsRecent && <NewBadge />}
-                    <HeatBadge level={heatLevel} />
-                  </div>
                   <span style={{
-                    fontSize: DESIGN.typography.size.sm,
-                    color: DESIGN.colors.text.secondary,
-                    fontFamily: DESIGN.typography.fontFamily.mono,
-                    whiteSpace: 'nowrap',
+                    fontSize: DESIGN.typography.size.xs,
+                    color: DESIGN.colors.text.tertiary,
+                    textTransform: 'uppercase',
+                    letterSpacing: DESIGN.typography.letterSpacing.wider,
                   }}>
-                    {formatTimeAgo(item.timestamp)}
+                    {signal.category}
                   </span>
+                  <div style={{
+                    padding: '4px 12px',
+                    borderRadius: DESIGN.radius.full,
+                    fontSize: DESIGN.typography.size.xs,
+                    fontWeight: DESIGN.typography.weight.bold,
+                    fontFamily: DESIGN.typography.fontFamily.mono,
+                    color: '#fff',
+                    background: signal.side === 'YES' 
+                      ? DESIGN.colors.semantic.profit 
+                      : DESIGN.colors.semantic.loss,
+                  }}>
+                    {signal.side}
+                  </div>
                 </div>
-                {hasUrl ? (
-                  <a 
-                    href={item.url} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    style={{
-                      display: 'block',
-                      margin: '0 0 10px 0',
-                      fontSize: DESIGN.typography.size.sm,
-                      fontWeight: DESIGN.typography.weight.medium,
-                      color: DESIGN.colors.text.primary,
-                      lineHeight: 1.5,
-                      textDecoration: 'none',
-                      transition: DESIGN.transition.fast,
-                    }}
-                    onMouseOver={(e) => e.target.style.color = DESIGN.colors.brand.primary}
-                    onMouseOut={(e) => e.target.style.color = DESIGN.colors.text.primary}
-                  >
-                    {item.title}
-                    <ExternalLink size={12} style={{ marginLeft: '6px', opacity: 0.5, verticalAlign: 'middle' }} />
-                  </a>
-                ) : (
+                
+                <div style={{ padding: '20px' }}>
                   <h4 style={{
-                    margin: '0 0 10px 0',
-                    fontSize: DESIGN.typography.size.sm,
-                    fontWeight: DESIGN.typography.weight.medium,
+                    margin: '0 0 12px 0',
+                    fontSize: DESIGN.typography.size.base,
+                    fontWeight: DESIGN.typography.weight.semibold,
                     color: DESIGN.colors.text.primary,
+                  }}>
+                    {signal.market_question}
+                  </h4>
+                  
+                  <div style={{
+                    display: 'flex',
+                    gap: '24px',
+                    marginBottom: '12px',
+                  }}>
+                    <div>
+                      <div style={{ fontSize: '10px', color: DESIGN.colors.text.tertiary, textTransform: 'uppercase' }}>Confidence</div>
+                      <div style={{ fontSize: DESIGN.typography.size.lg, fontWeight: DESIGN.typography.weight.bold, fontFamily: DESIGN.typography.fontFamily.mono, color: DESIGN.colors.text.primary }}>
+                        {(signal.confidence * 100).toFixed(0)}%
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '10px', color: DESIGN.colors.text.tertiary, textTransform: 'uppercase' }}>Sources</div>
+                      <div style={{ fontSize: DESIGN.typography.size.lg, fontWeight: DESIGN.typography.weight.bold, fontFamily: DESIGN.typography.fontFamily.mono, color: DESIGN.colors.text.primary }}>
+                        {signal.sources_count}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <p style={{
+                    margin: 0,
+                    fontSize: DESIGN.typography.size.xs,
+                    color: DESIGN.colors.text.secondary,
                     lineHeight: 1.5,
                   }}>
-                    {item.title}
-                  </h4>
-                )}
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '16px',
-                  fontSize: DESIGN.typography.size.xs,
-                }}>
-                  <span style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    padding: '3px 8px',
-                    borderRadius: DESIGN.radius.sm,
-                    backgroundColor: item.sentiment > 0 
-                      ? DESIGN.colors.semantic.profitBg
-                      : item.sentiment < 0 
-                        ? DESIGN.colors.semantic.lossBg
-                        : DESIGN.colors.bg.surface,
-                    color: item.sentiment > 0 
-                      ? DESIGN.colors.semantic.profit 
-                      : item.sentiment < 0 
-                        ? DESIGN.colors.semantic.loss 
-                        : DESIGN.colors.text.tertiary,
-                    fontWeight: DESIGN.typography.weight.semibold,
-                  }}>
-                    {item.sentiment > 0 ? <TrendingUp size={12} /> : item.sentiment < 0 ? <TrendingDown size={12} /> : <Minus size={12} />}
-                    {item.sentiment > 0 ? 'Bullish' : item.sentiment < 0 ? 'Bearish' : 'Neutral'}
-                  </span>
-                  <span style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: '4px',
-                    color: DESIGN.colors.text.tertiary 
-                  }}>
-                    <ArrowUp size={12} />
-                    {(item.upvotes || 0).toLocaleString()}
-                  </span>
-                  <span style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: '4px',
-                    color: DESIGN.colors.text.tertiary 
-                  }}>
-                    <MessageSquare size={12} />
-                    {(item.comments || 0).toLocaleString()}
-                  </span>
+                    {signal.reasoning}
+                  </p>
                 </div>
               </Card>
-            );
-            })
-          )}
+            ))}
+          </div>
         </div>
       )}
     </div>
   );
 };
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // MAIN APPLICATION
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -2361,7 +2547,7 @@ function App() {
               {/* Research / Intelligence */}
               {activeTab === 'research' && (
                 <div style={{ animation: 'fadeIn 0.3s ease' }}>
-                  <ResearchDashboard />
+                  <IntelligenceCommandCenter />
                 </div>
               )}
 
