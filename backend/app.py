@@ -211,6 +211,64 @@ def cancel_order(order_id):
         return jsonify({'message': 'Order canceled successfully'})
     return jsonify({'error': 'Failed to cancel order'}), 500
 
+# ═══════════════════════════════════════════════════════════════════════════
+# MARKET DATA ENDPOINTS
+# ═══════════════════════════════════════════════════════════════════════════
+
+@app.route('/api/market/movers', methods=['GET'])
+def get_market_movers():
+    """Get top gainers and losers"""
+    if not broker:
+        return jsonify({'error': 'Broker not connected'}), 503
+    
+    try:
+        movers = broker.get_top_movers()
+        return jsonify(movers)
+    except Exception as e:
+        print(f"Error getting market movers: {e}")
+        return jsonify({'gainers': [], 'losers': []})
+
+@app.route('/api/market/indices', methods=['GET'])
+def get_market_indices():
+    """Get major market indices"""
+    if not broker:
+        return jsonify({'error': 'Broker not connected'}), 503
+    
+    try:
+        indices = broker.get_market_indices()
+        return jsonify(indices)
+    except Exception as e:
+        print(f"Error getting market indices: {e}")
+        return jsonify([])
+
+@app.route('/api/market/stats', methods=['GET'])
+def get_market_stats():
+    """Get overall market statistics"""
+    if not broker:
+        return jsonify({'error': 'Broker not connected'}), 503
+    
+    try:
+        stats = broker.get_market_stats()
+        return jsonify(stats)
+    except Exception as e:
+        print(f"Error getting market stats: {e}")
+        return jsonify({})
+
+@app.route('/api/market/snapshot/<symbol>', methods=['GET'])
+def get_stock_snapshot(symbol):
+    """Get snapshot for a single symbol"""
+    if not broker:
+        return jsonify({'error': 'Broker not connected'}), 503
+    
+    try:
+        snapshots = broker.get_snapshots([symbol.upper()])
+        if snapshots:
+            return jsonify(snapshots[0])
+        return jsonify({'error': 'Symbol not found'}), 404
+    except Exception as e:
+        print(f"Error getting snapshot: {e}")
+        return jsonify({'error': str(e)}), 500
+
 # Trade history endpoints
 @app.route('/api/trades', methods=['GET'])
 def get_trades():
