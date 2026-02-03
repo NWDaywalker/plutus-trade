@@ -2100,6 +2100,11 @@ function App() {
   const [recommendations, setRecommendations] = useState([]);
   const [loadingIntelligence, setLoadingIntelligence] = useState(false);
 
+  // Market data state
+  const [marketMovers, setMarketMovers] = useState({ gainers: [], losers: [] });
+  const [marketIndices, setMarketIndices] = useState([]);
+  const [marketStats, setMarketStats] = useState({});
+
   // Clock
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -2143,6 +2148,7 @@ function App() {
       fetchTrades(),
       fetchAccountHistory(),
       fetchBotStatus(),
+      fetchMarketData(),
     ]);
   };
 
@@ -2151,6 +2157,22 @@ function App() {
       const res = await fetch(`${API_BASE}/account`);
       if (res.ok) setAccount(await res.json());
     } catch (err) {}
+  };
+
+  const fetchMarketData = async () => {
+    try {
+      const [moversRes, indicesRes, statsRes] = await Promise.all([
+        fetch(`${API_BASE}/market/movers`),
+        fetch(`${API_BASE}/market/indices`),
+        fetch(`${API_BASE}/market/stats`),
+      ]);
+      
+      if (moversRes.ok) setMarketMovers(await moversRes.json());
+      if (indicesRes.ok) setMarketIndices(await indicesRes.json());
+      if (statsRes.ok) setMarketStats(await statsRes.json());
+    } catch (err) {
+      console.error('Error fetching market data:', err);
+    }
   };
 
   const fetchPositions = async () => {
@@ -2868,13 +2890,13 @@ function App() {
                     <Card>
                       <SectionHeader icon={TrendingUp} title="Top Gainers" />
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {[
-                          { symbol: 'NVDA', price: 892.45, change: 8.24 },
-                          { symbol: 'AMD', price: 178.32, change: 5.67 },
-                          { symbol: 'TSLA', price: 248.50, change: 4.32 },
-                          { symbol: 'META', price: 524.18, change: 3.89 },
-                          { symbol: 'AAPL', price: 269.48, change: 2.15 },
-                        ].map((stock, idx) => (
+                        {(marketMovers.gainers?.length > 0 ? marketMovers.gainers : [
+                          { symbol: 'NVDA', price: 892.45, change_pct: 8.24 },
+                          { symbol: 'AMD', price: 178.32, change_pct: 5.67 },
+                          { symbol: 'TSLA', price: 248.50, change_pct: 4.32 },
+                          { symbol: 'META', price: 524.18, change_pct: 3.89 },
+                          { symbol: 'AAPL', price: 269.48, change_pct: 2.15 },
+                        ]).map((stock, idx) => (
                           <div key={idx} style={{
                             display: 'flex',
                             justifyContent: 'space-between',
@@ -2904,7 +2926,7 @@ function App() {
                                 fontSize: DESIGN.typography.size.sm,
                                 color: DESIGN.colors.text.secondary,
                               }}>
-                                ${stock.price.toFixed(2)}
+                                ${stock.price?.toFixed(2) || '0.00'}
                               </span>
                               <span style={{
                                 fontFamily: DESIGN.typography.fontFamily.mono,
@@ -2916,7 +2938,7 @@ function App() {
                                 gap: '2px',
                               }}>
                                 <ArrowUpRight size={14} />
-                                +{stock.change.toFixed(2)}%
+                                +{(stock.change_pct || stock.change || 0).toFixed(2)}%
                               </span>
                             </div>
                           </div>
@@ -2928,13 +2950,13 @@ function App() {
                     <Card>
                       <SectionHeader icon={TrendingDown} title="Top Losers" />
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {[
-                          { symbol: 'INTC', price: 42.15, change: -6.32 },
-                          { symbol: 'BA', price: 178.90, change: -4.87 },
-                          { symbol: 'DIS', price: 98.45, change: -3.45 },
-                          { symbol: 'PYPL', price: 62.30, change: -2.98 },
-                          { symbol: 'NKE', price: 94.12, change: -2.21 },
-                        ].map((stock, idx) => (
+                        {(marketMovers.losers?.length > 0 ? marketMovers.losers : [
+                          { symbol: 'INTC', price: 42.15, change_pct: -6.32 },
+                          { symbol: 'BA', price: 178.90, change_pct: -4.87 },
+                          { symbol: 'DIS', price: 98.45, change_pct: -3.45 },
+                          { symbol: 'PYPL', price: 62.30, change_pct: -2.98 },
+                          { symbol: 'NKE', price: 94.12, change_pct: -2.21 },
+                        ]).map((stock, idx) => (
                           <div key={idx} style={{
                             display: 'flex',
                             justifyContent: 'space-between',
@@ -2964,7 +2986,7 @@ function App() {
                                 fontSize: DESIGN.typography.size.sm,
                                 color: DESIGN.colors.text.secondary,
                               }}>
-                                ${stock.price.toFixed(2)}
+                                ${stock.price?.toFixed(2) || '0.00'}
                               </span>
                               <span style={{
                                 fontFamily: DESIGN.typography.fontFamily.mono,
@@ -2976,7 +2998,7 @@ function App() {
                                 gap: '2px',
                               }}>
                                 <ArrowDownRight size={14} />
-                                {stock.change.toFixed(2)}%
+                                {(stock.change_pct || stock.change || 0).toFixed(2)}%
                               </span>
                             </div>
                           </div>
@@ -2989,11 +3011,11 @@ function App() {
                       <SectionHeader icon={BarChart3} title="Market Overview" />
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                         {/* Major Indices */}
-                        {[
-                          { name: 'S&P 500', value: '5,892.45', change: 0.87 },
-                          { name: 'NASDAQ', value: '18,924.32', change: 1.24 },
-                          { name: 'DOW', value: '43,156.78', change: 0.45 },
-                        ].map((index, idx) => (
+                        {(marketIndices.length > 0 ? marketIndices : [
+                          { name: 'S&P 500', value: 5892.45, change_pct: 0.87 },
+                          { name: 'NASDAQ', value: 18924.32, change_pct: 1.24 },
+                          { name: 'DOW', value: 43156.78, change_pct: 0.45 },
+                        ]).map((index, idx) => (
                           <div key={idx} style={{
                             display: 'flex',
                             justifyContent: 'space-between',
@@ -3014,15 +3036,15 @@ function App() {
                                 fontSize: DESIGN.typography.size.sm,
                                 color: DESIGN.colors.text.primary,
                               }}>
-                                {index.value}
+                                {typeof index.value === 'number' ? index.value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : index.value}
                               </span>
                               <span style={{
                                 fontFamily: DESIGN.typography.fontFamily.mono,
                                 fontSize: DESIGN.typography.size.xs,
                                 fontWeight: DESIGN.typography.weight.semibold,
-                                color: index.change >= 0 ? DESIGN.colors.semantic.profit : DESIGN.colors.semantic.loss,
+                                color: (index.change_pct || index.change || 0) >= 0 ? DESIGN.colors.semantic.profit : DESIGN.colors.semantic.loss,
                               }}>
-                                {index.change >= 0 ? '+' : ''}{index.change.toFixed(2)}%
+                                {(index.change_pct || index.change || 0) >= 0 ? '+' : ''}{(index.change_pct || index.change || 0).toFixed(2)}%
                               </span>
                             </div>
                           </div>
@@ -3052,7 +3074,7 @@ function App() {
                               color: DESIGN.colors.text.tertiary,
                               marginBottom: '4px',
                             }}>
-                              Market Volume
+                              Tracked Volume
                             </div>
                             <div style={{
                               fontSize: DESIGN.typography.size.base,
@@ -3060,7 +3082,7 @@ function App() {
                               fontFamily: DESIGN.typography.fontFamily.mono,
                               color: DESIGN.colors.text.primary,
                             }}>
-                              12.4B
+                              {marketStats.total_volume ? (marketStats.total_volume / 1000000000).toFixed(1) + 'B' : '—'}
                             </div>
                           </div>
                           <div style={{
@@ -3081,14 +3103,14 @@ function App() {
                               fontWeight: DESIGN.typography.weight.bold,
                               fontFamily: DESIGN.typography.fontFamily.mono,
                             }}>
-                              <span style={{ color: DESIGN.colors.semantic.profit }}>2,847</span>
+                              <span style={{ color: DESIGN.colors.semantic.profit }}>{marketStats.advancers || '—'}</span>
                               <span style={{ color: DESIGN.colors.text.tertiary }}> / </span>
-                              <span style={{ color: DESIGN.colors.semantic.loss }}>1,453</span>
+                              <span style={{ color: DESIGN.colors.semantic.loss }}>{marketStats.decliners || '—'}</span>
                             </div>
                           </div>
                         </div>
 
-                        {/* VIX */}
+                        {/* Market Sentiment */}
                         <div style={{
                           padding: '12px',
                           backgroundColor: DESIGN.colors.bg.surface,
@@ -3101,7 +3123,7 @@ function App() {
                             fontSize: DESIGN.typography.size.sm,
                             color: DESIGN.colors.text.secondary,
                           }}>
-                            VIX (Fear Index)
+                            Market Sentiment
                           </span>
                           <div style={{
                             display: 'flex',
@@ -3111,18 +3133,20 @@ function App() {
                             <span style={{
                               fontFamily: DESIGN.typography.fontFamily.mono,
                               fontWeight: DESIGN.typography.weight.bold,
-                              color: DESIGN.colors.semantic.profit,
+                              color: marketStats.advancers > marketStats.decliners ? DESIGN.colors.semantic.profit : DESIGN.colors.semantic.loss,
                             }}>
-                              14.32
+                              {marketStats.advancers && marketStats.decliners 
+                                ? ((marketStats.advancers / (marketStats.advancers + marketStats.decliners)) * 100).toFixed(0) + '%'
+                                : '—'}
                             </span>
                             <span style={{
                               fontSize: DESIGN.typography.size.xs,
                               padding: '2px 6px',
-                              backgroundColor: DESIGN.colors.semantic.profitBg,
-                              color: DESIGN.colors.semantic.profit,
+                              backgroundColor: marketStats.advancers > marketStats.decliners ? DESIGN.colors.semantic.profitBg : DESIGN.colors.semantic.lossBg,
+                              color: marketStats.advancers > marketStats.decliners ? DESIGN.colors.semantic.profit : DESIGN.colors.semantic.loss,
                               borderRadius: DESIGN.radius.sm,
                             }}>
-                              Low Fear
+                              {marketStats.advancers > marketStats.decliners ? 'Bullish' : marketStats.advancers < marketStats.decliners ? 'Bearish' : 'Neutral'}
                             </span>
                           </div>
                         </div>
