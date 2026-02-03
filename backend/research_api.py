@@ -71,20 +71,30 @@ def get_research_items():
     Get recent research items
     Query params:
         - category: politics, sports, crypto, entertainment
+        - source_type: reddit, news, prediction_market, social_media
         - hours: number of hours to look back (default 24)
         - limit: max items to return (default 50)
     """
     category = request.args.get('category')
+    source_type = request.args.get('source_type')
     hours = request.args.get('hours', 24, type=int)
     limit = request.args.get('limit', 50, type=int)
     
     cat = Category(category) if category else None
-    items = research_db.get_recent_research(category=cat, hours=hours, limit=limit)
+    
+    # If filtering by source_type, fetch more items first then filter
+    if source_type:
+        # Fetch more to ensure we get enough after filtering
+        all_items = research_db.get_recent_research(category=cat, hours=hours, limit=5000)
+        items = [item for item in all_items if item.get('source_type') == source_type][:limit]
+    else:
+        items = research_db.get_recent_research(category=cat, hours=hours, limit=limit)
     
     return jsonify({
         'items': items,
         'count': len(items),
         'category': category,
+        'source_type': source_type,
         'hours': hours
     })
 
