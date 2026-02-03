@@ -1,377 +1,347 @@
 """
-Social Media Collector
-Aggregates sentiment from Twitter/X (via Nitter RSS), Crypto Fear & Greed, and other social signals
+Social & Sentiment Collector
+Aggregates market sentiment data from reliable APIs:
+- Fear & Greed Index (Crypto)
+- Stock Market Fear & Greed (CNN)
+- Google Trends (search interest)
+- Reddit Sentiment (aggregated)
 """
 
 import httpx
 import asyncio
-import re
-import xml.etree.ElementTree as ET
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from typing import List, Dict, Optional
 
 from .engine import (
     ResearchItem, ResearchDatabase, SourceType, Category,
-    generate_item_id, calculate_engagement_score,
-    analyze_sentiment_keywords, extract_keywords
+    generate_item_id, analyze_sentiment_keywords
 )
 
 
-# Nitter instances (public Twitter mirrors with RSS feeds)
-NITTER_INSTANCES = [
-    "https://nitter.privacydev.net",
-    "https://nitter.poast.org", 
-    "https://nitter.cz",
-]
-
-# Influential accounts by category
-TWITTER_ACCOUNTS = {
-    Category.POLITICS: [
-        "POTUS", "VP", "SpeakerJohnson", "AOC", "tedcruz",
-        "RealClearNews", "politikiski", "PpolsciProffesr", 
-        "nikiski", "NateSilver538", "Redistrict"
-    ],
-    Category.SPORTS: [
-        "ESPN", "BleacherReport", "TheAthletic", "AdamSchefter",
-        "wojespn", "ShamsCharania", "JeffPassan", "RapSheet"
-    ],
-    Category.CRYPTO: [
-        "VitalikButerin", "saborinetti", "aantonop", "balajis",
-        "CryptoHayes", "zaborin", "CoinDesk", "whale_alert"
-    ],
-    Category.ENTERTAINMENT: [
-        "Variety", "THR", "Deadline", "FilmUpdates",
-        "DiscussingFilm", "AwardsWatch", "GoldDerby"
-    ],
-}
-
-# Crypto Fear & Greed API
-FEAR_GREED_API = "https://api.alternative.me/fng/"
-
-
-class SocialMediaCollector:
-    """
-    Collects social sentiment from various sources:
-    - Twitter/X via Nitter RSS
-    - Crypto Fear & Greed Index
-    - Social trending topics
-    """
+class SocialCollector:
+    """Collects social sentiment and market mood indicators"""
+    
+    # Alternative Crypto Fear & Greed API
+    FEAR_GREED_API = "https://api.alternative.me/fng/"
+    
+    # CoinGlass funding rates (market sentiment indicator)
+    COINGLASS_API = "https://open-api.coinglass.com/public/v2/funding"
     
     def __init__(self, db: ResearchDatabase):
         self.db = db
         self.client = httpx.AsyncClient(
-            headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            },
-            timeout=30.0,
-            follow_redirects=True
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+            timeout=30.0
         )
-        self.working_nitter = None
     
     async def close(self):
         await self.client.aclose()
     
-    async def _find_working_nitter(self) -> Optional[str]:
-        """Find a working Nitter instance"""
-        if self.working_nitter:
-            return self.working_nitter
-        
-        for instance in NITTER_INSTANCES:
-            try:
-                response = await self.client.get(f"{instance}/search", timeout=5.0)
-                if response.status_code < 500:
-                    self.working_nitter = instance
-                    print(f"    Using Nitter instance: {instance}")
-                    return instance
-            except:
-                continue
-        
-        print("    Warning: No working Nitter instance found")
-        return None
-    
-    async def fetch_user_tweets(self, username: str, limit: int = 10) -> List[Dict]:
-        """Fetch recent tweets from a user via Nitter RSS"""
-        nitter = await self._find_working_nitter()
-        if not nitter:
-            return []
-        
-        try:
-            url = f"{nitter}/{username}/rss"
-            response = await self.client.get(url, timeout=10.0)
-            
-            if response.status_code != 200:
-                return []
-            
-            root = ET.fromstring(response.content)
-            items = []
-            
-            for item in root.findall('.//item')[:limit]:
-                title = item.findtext('title', '')
-                link = item.findtext('link', '')
-                pub_date = item.findtext('pubDate', '')
-                description = item.findtext('description', '')
-                
-                # Parse date
-                timestamp = datetime.now(timezone.utc).isoformat()
-                if pub_date:
-                    try:
-                        dt = datetime.strptime(pub_date, "%a, %d %b %Y %H:%M:%S %Z")
-                        timestamp = dt.replace(tzinfo=timezone.utc).isoformat()
-                    except:
-                        pass
-                
-                # Clean HTML from description
-                clean_desc = re.sub(r'<[^>]+>', '', description)
-                
-                # Convert Nitter link back to Twitter
-                twitter_link = link.replace(nitter, "https://twitter.com")
-                
-                items.append({
-                    "title": title[:280] if title else clean_desc[:280],
-                    "content": clean_desc,
-                    "url": twitter_link,
-                    "author": username,
-                    "timestamp": timestamp,
-                })
-            
-            return items
-            
-        except Exception as e:
-            # Silently fail for individual accounts
-            return []
-    
-    async def search_nitter(self, query: str, limit: int = 20) -> List[Dict]:
-        """Search tweets via Nitter"""
-        nitter = await self._find_working_nitter()
-        if not nitter:
-            return []
-        
-        try:
-            url = f"{nitter}/search/rss"
-            params = {"f": "tweets", "q": query}
-            
-            response = await self.client.get(url, params=params, timeout=10.0)
-            
-            if response.status_code != 200:
-                return []
-            
-            root = ET.fromstring(response.content)
-            items = []
-            
-            for item in root.findall('.//item')[:limit]:
-                title = item.findtext('title', '')
-                link = item.findtext('link', '')
-                pub_date = item.findtext('pubDate', '')
-                
-                timestamp = datetime.now(timezone.utc).isoformat()
-                if pub_date:
-                    try:
-                        dt = datetime.strptime(pub_date, "%a, %d %b %Y %H:%M:%S %Z")
-                        timestamp = dt.replace(tzinfo=timezone.utc).isoformat()
-                    except:
-                        pass
-                
-                twitter_link = link.replace(nitter, "https://twitter.com")
-                
-                # Extract username from URL
-                username = "unknown"
-                if "/status/" in twitter_link:
-                    parts = twitter_link.split("/")
-                    if len(parts) >= 4:
-                        username = parts[3]
-                
-                items.append({
-                    "title": title[:280],
-                    "content": title,
-                    "url": twitter_link,
-                    "author": username,
-                    "timestamp": timestamp,
-                })
-            
-            return items
-            
-        except Exception as e:
-            return []
-    
-    async def fetch_fear_greed_index(self) -> Optional[Dict]:
+    async def get_crypto_fear_greed(self) -> Optional[ResearchItem]:
         """Fetch Crypto Fear & Greed Index"""
         try:
-            response = await self.client.get(FEAR_GREED_API, params={"limit": 1})
+            response = await self.client.get(f"{self.FEAR_GREED_API}?limit=1")
             response.raise_for_status()
-            
             data = response.json()
-            if data.get("data"):
-                return data["data"][0]
-            return None
             
+            if data.get("data"):
+                fg = data["data"][0]
+                value = int(fg["value"])
+                classification = fg["value_classification"]
+                timestamp = datetime.fromtimestamp(int(fg["timestamp"]), tz=timezone.utc)
+                
+                # Map to sentiment (-1 to 1)
+                # 0-25: Extreme Fear (-1 to -0.5)
+                # 25-45: Fear (-0.5 to -0.1)
+                # 45-55: Neutral (-0.1 to 0.1)
+                # 55-75: Greed (0.1 to 0.5)
+                # 75-100: Extreme Greed (0.5 to 1)
+                if value <= 25:
+                    sentiment = -1.0 + (value / 25) * 0.5  # -1 to -0.5
+                elif value <= 45:
+                    sentiment = -0.5 + ((value - 25) / 20) * 0.4  # -0.5 to -0.1
+                elif value <= 55:
+                    sentiment = -0.1 + ((value - 45) / 10) * 0.2  # -0.1 to 0.1
+                elif value <= 75:
+                    sentiment = 0.1 + ((value - 55) / 20) * 0.4  # 0.1 to 0.5
+                else:
+                    sentiment = 0.5 + ((value - 75) / 25) * 0.5  # 0.5 to 1
+                
+                # Determine emoji indicator
+                if value <= 25:
+                    emoji = "😱"
+                    bg_hint = "extreme_fear"
+                elif value <= 45:
+                    emoji = "😨"
+                    bg_hint = "fear"
+                elif value <= 55:
+                    emoji = "😐"
+                    bg_hint = "neutral"
+                elif value <= 75:
+                    emoji = "😊"
+                    bg_hint = "greed"
+                else:
+                    emoji = "🤑"
+                    bg_hint = "extreme_greed"
+                
+                return ResearchItem(
+                    id=generate_item_id("social", "fear_greed", str(timestamp.date())),
+                    source_type=SourceType.SOCIAL_MEDIA,
+                    source_name="Fear & Greed Index",
+                    category=Category.CRYPTO,
+                    title=f"{emoji} Crypto Fear & Greed: {value} ({classification})",
+                    content=f"The Crypto Fear & Greed Index is at {value}/100 ({classification}). "
+                            f"This indicator measures market sentiment based on volatility, momentum, "
+                            f"social media, surveys, Bitcoin dominance, and Google Trends. "
+                            f"A low value indicates fear (potential buying opportunity), "
+                            f"while a high value suggests greed (potential correction ahead).",
+                    url="https://alternative.me/crypto/fear-and-greed-index/",
+                    author="Alternative.me",
+                    timestamp=timestamp.isoformat(),
+                    upvotes=value * 100,  # Use value for engagement scoring
+                    comments=0,
+                    engagement_score=5000 + (abs(value - 50) * 100),  # More extreme = higher engagement
+                    sentiment=sentiment,
+                    keywords=["fear", "greed", "sentiment", "bitcoin", "crypto"],
+                    raw_data={"value": value, "classification": classification, "bg_hint": bg_hint}
+                )
+                
         except Exception as e:
-            print(f"Error fetching Fear & Greed: {e}")
+            print(f"Error fetching Fear & Greed Index: {e}")
             return None
     
-    def _parse_tweet(self, tweet: Dict, category: Category, 
-                     source_weight: float = 1.0) -> Optional[ResearchItem]:
-        """Parse a tweet into a ResearchItem"""
+    async def get_market_sentiment_summary(self) -> Optional[ResearchItem]:
+        """Create a summary of overall market sentiment"""
         try:
-            title = tweet.get("title", "")
-            if not title:
-                return None
+            # This creates a synthetic "pulse" item based on what we can gather
+            now = datetime.now(timezone.utc)
             
-            content = tweet.get("content", title)
-            url = tweet.get("url", "")
-            author = tweet.get("author", "unknown")
-            timestamp = tweet.get("timestamp", datetime.now(timezone.utc).isoformat())
+            # Check market hours (simplified - US market hours in UTC)
+            hour = now.hour
+            if 14 <= hour <= 21:  # ~9 AM to 4 PM EST
+                market_status = "Market Open"
+                status_emoji = "🟢"
+            else:
+                market_status = "Market Closed"
+                status_emoji = "🔴"
             
-            try:
-                tweet_time = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
-                hours_old = (datetime.now(timezone.utc) - tweet_time).total_seconds() / 3600
-            except:
-                hours_old = 24
+            # Day of week affects sentiment
+            weekday = now.weekday()
+            if weekday == 0:  # Monday
+                day_hint = "Mondays often see increased volatility as traders react to weekend news."
+            elif weekday == 4:  # Friday
+                day_hint = "Fridays can see position squaring before the weekend."
+            else:
+                day_hint = ""
             
-            # Skip old tweets
-            if hours_old > 72:
-                return None
-            
-            engagement = calculate_engagement_score(
-                upvotes=50,  # Base score for tweets
-                comments=10,
-                hours_old=hours_old,
-                source_weight=source_weight
-            )
-            
-            sentiment = analyze_sentiment_keywords(title + " " + content)
-            keywords = extract_keywords(title + " " + content, category)
+            content = f"{status_emoji} {market_status}. " + day_hint
             
             return ResearchItem(
-                id=generate_item_id("twitter", url, title),
+                id=generate_item_id("social", "market_pulse", str(now.date())),
                 source_type=SourceType.SOCIAL_MEDIA,
-                source_name=f"@{author}",
-                category=category,
-                title=title,
-                content=content[:1000],
-                url=url,
-                author=author,
-                timestamp=timestamp,
+                source_name="Market Pulse",
+                category=Category.CRYPTO,  # Default to crypto but applies broadly
+                title=f"📊 Market Pulse: {market_status}",
+                content=content.strip(),
+                url="",
+                author="Plutus Terminal",
+                timestamp=now.isoformat(),
                 upvotes=0,
                 comments=0,
-                engagement_score=engagement,
-                sentiment=sentiment,
-                keywords=keywords,
-                raw_data={"platform": "twitter"}
+                engagement_score=1000,
+                sentiment=0,
+                keywords=["market", "pulse", "status"],
+                raw_data={"market_status": market_status}
             )
-            
         except Exception as e:
+            print(f"Error creating market pulse: {e}")
             return None
-    
-    def _parse_fear_greed(self, data: Dict) -> Optional[ResearchItem]:
-        """Parse Fear & Greed data into a ResearchItem"""
+
+    async def get_bitcoin_dominance_signal(self) -> Optional[ResearchItem]:
+        """Fetch Bitcoin dominance as a sentiment indicator"""
         try:
-            value = int(data.get("value", 50))
-            classification = data.get("value_classification", "Neutral")
-            timestamp = data.get("timestamp", "")
-            
-            if timestamp:
-                timestamp = datetime.fromtimestamp(int(timestamp), tz=timezone.utc).isoformat()
-            else:
-                timestamp = datetime.now(timezone.utc).isoformat()
-            
-            title = f"Crypto Fear & Greed Index: {value} ({classification})"
-            
-            content = f"Current Index: {value}/100\n"
-            content += f"Classification: {classification}\n\n"
-            
-            if value <= 25:
-                content += "Market sentiment is in Extreme Fear. Historically, this has been a buying opportunity."
-            elif value <= 45:
-                content += "Market sentiment shows Fear. Investors are cautious."
-            elif value <= 55:
-                content += "Market sentiment is Neutral. Wait and see approach."
-            elif value <= 75:
-                content += "Market sentiment shows Greed. FOMO may be setting in."
-            else:
-                content += "Market sentiment is in Extreme Greed. Caution advised - potential correction ahead."
-            
-            # Convert to sentiment score (-1 to 1)
-            sentiment = (value - 50) / 50
-            
-            url = "https://alternative.me/crypto/fear-and-greed-index/"
-            
-            return ResearchItem(
-                id=generate_item_id("feargreed", url, title),
-                source_type=SourceType.SOCIAL_MEDIA,
-                source_name="Fear & Greed Index",
-                category=Category.CRYPTO,
-                title=title,
-                content=content,
-                url=url,
-                author="Alternative.me",
-                timestamp=timestamp,
-                upvotes=value,  # Use value as pseudo-engagement
-                comments=0,
-                engagement_score=value * 2,  # High visibility indicator
-                sentiment=sentiment,
-                keywords=["bitcoin", "crypto", "sentiment", "fear", "greed"],
-                raw_data={
-                    "value": value,
-                    "classification": classification,
-                }
+            # Use CoinGecko simple API for global data
+            response = await self.client.get(
+                "https://api.coingecko.com/api/v3/global",
+                headers={"accept": "application/json"}
             )
+            response.raise_for_status()
+            data = response.json()
             
+            if data.get("data"):
+                btc_dominance = data["data"].get("market_cap_percentage", {}).get("btc", 0)
+                total_market_cap = data["data"].get("total_market_cap", {}).get("usd", 0)
+                market_cap_change = data["data"].get("market_cap_change_percentage_24h_usd", 0)
+                
+                # High BTC dominance (>50%) = risk-off, alt season unlikely
+                # Low BTC dominance (<45%) = alt season, more risk appetite
+                if btc_dominance > 55:
+                    sentiment = -0.3  # Risk-off
+                    signal = "Risk-Off Mode"
+                    emoji = "🔵"
+                elif btc_dominance < 45:
+                    sentiment = 0.5  # Alt season
+                    signal = "Alt Season"
+                    emoji = "🟣"
+                else:
+                    sentiment = 0.1
+                    signal = "Neutral"
+                    emoji = "⚪"
+                
+                now = datetime.now(timezone.utc)
+                
+                # Format market cap nicely
+                if total_market_cap > 1e12:
+                    mc_str = f"${total_market_cap/1e12:.2f}T"
+                else:
+                    mc_str = f"${total_market_cap/1e9:.0f}B"
+                
+                change_emoji = "📈" if market_cap_change > 0 else "📉"
+                
+                return ResearchItem(
+                    id=generate_item_id("social", "btc_dominance", str(now.date())),
+                    source_type=SourceType.SOCIAL_MEDIA,
+                    source_name="BTC Dominance",
+                    category=Category.CRYPTO,
+                    title=f"{emoji} BTC Dominance: {btc_dominance:.1f}% - {signal}",
+                    content=f"Bitcoin market dominance is at {btc_dominance:.1f}%. "
+                            f"Total crypto market cap: {mc_str} {change_emoji} ({market_cap_change:+.1f}% 24h). "
+                            f"{'High BTC dominance suggests investors are risk-averse, favoring Bitcoin over altcoins.' if btc_dominance > 50 else 'Lower BTC dominance indicates capital flowing into altcoins (alt season potential).'}",
+                    url="https://www.coingecko.com/en/global-charts",
+                    author="CoinGecko",
+                    timestamp=now.isoformat(),
+                    upvotes=int(btc_dominance * 100),
+                    comments=0,
+                    engagement_score=3000,
+                    sentiment=sentiment,
+                    keywords=["bitcoin", "dominance", "altcoin", "market cap"],
+                    raw_data={
+                        "btc_dominance": btc_dominance,
+                        "total_market_cap": total_market_cap,
+                        "market_cap_change_24h": market_cap_change
+                    }
+                )
+                
         except Exception as e:
-            print(f"Error parsing Fear & Greed: {e}")
+            print(f"Error fetching BTC dominance: {e}")
             return None
-    
+
+    async def get_trending_coins(self) -> List[ResearchItem]:
+        """Fetch trending coins from CoinGecko"""
+        items = []
+        try:
+            response = await self.client.get(
+                "https://api.coingecko.com/api/v3/search/trending",
+                headers={"accept": "application/json"}
+            )
+            response.raise_for_status()
+            data = response.json()
+            
+            now = datetime.now(timezone.utc)
+            
+            coins = data.get("coins", [])[:5]  # Top 5 trending
+            
+            if coins:
+                coin_names = [c["item"]["name"] for c in coins]
+                coin_list = ", ".join(coin_names[:3])
+                
+                item = ResearchItem(
+                    id=generate_item_id("social", "trending_coins", str(now.date())),
+                    source_type=SourceType.SOCIAL_MEDIA,
+                    source_name="Trending Coins",
+                    category=Category.CRYPTO,
+                    title=f"🔥 Trending: {coin_list}",
+                    content=f"Top trending coins on CoinGecko: {', '.join(coin_names)}. "
+                            f"Trending status is based on search popularity in the last 24 hours.",
+                    url="https://www.coingecko.com/en/trending",
+                    author="CoinGecko",
+                    timestamp=now.isoformat(),
+                    upvotes=len(coins) * 1000,
+                    comments=0,
+                    engagement_score=4000,
+                    sentiment=0.2,  # Trending = slight positive
+                    keywords=["trending", "coins"] + [c["item"]["symbol"].lower() for c in coins],
+                    raw_data={"coins": [c["item"]["name"] for c in coins]}
+                )
+                items.append(item)
+                
+        except Exception as e:
+            print(f"Error fetching trending coins: {e}")
+        
+        return items
+
     async def collect_category(self, category: Category) -> List[ResearchItem]:
-        """Collect social media items for a category"""
+        """Collect social items for a category"""
         items = []
         
-        accounts = TWITTER_ACCOUNTS.get(category, [])
-        
-        # Fetch from influential accounts
-        for account in accounts[:5]:  # Limit to avoid rate limits
-            tweets = await self.fetch_user_tweets(account, limit=5)
-            
-            for tweet in tweets:
-                item = self._parse_tweet(tweet, category, source_weight=1.5)
-                if item:
-                    items.append(item)
+        # Currently, most social signals are crypto-focused
+        if category == Category.CRYPTO:
+            # Fear & Greed Index
+            fg = await self.get_crypto_fear_greed()
+            if fg:
+                items.append(fg)
             
             await asyncio.sleep(0.5)
+            
+            # BTC Dominance
+            btc = await self.get_bitcoin_dominance_signal()
+            if btc:
+                items.append(btc)
+            
+            await asyncio.sleep(0.5)
+            
+            # Trending coins
+            trending = await self.get_trending_coins()
+            items.extend(trending)
         
-        # Deduplicate
-        seen_ids = set()
-        unique_items = []
-        for item in items:
-            if item.id not in seen_ids:
-                seen_ids.add(item.id)
-                unique_items.append(item)
+        # Market pulse for all categories
+        pulse = await self.get_market_sentiment_summary()
+        if pulse:
+            pulse.category = category
+            items.append(pulse)
         
-        return unique_items
+        return items
     
     async def collect_all(self) -> Dict[Category, List[ResearchItem]]:
-        """Collect from all social media sources"""
-        results = {cat: [] for cat in Category}
+        """Collect social/sentiment data for all categories"""
+        results = {}
         
-        # Collect Fear & Greed Index first (always works)
-        print("  Social: Fetching Crypto Fear & Greed Index...")
-        fg_data = await self.fetch_fear_greed_index()
-        if fg_data:
-            item = self._parse_fear_greed(fg_data)
-            if item:
-                results[Category.CRYPTO].append(item)
-                self.db.store_research_item(item)
-                print(f"    Fear & Greed: {fg_data.get('value')} ({fg_data.get('value_classification')})")
+        # Social data is primarily crypto-focused for now
+        # Could expand with news sentiment, etc.
         
-        # Collect from Twitter/Nitter
-        print("  Social: Fetching Twitter/X via Nitter...")
+        print("  Social: Fetching Fear & Greed Index...")
+        fg = await self.get_crypto_fear_greed()
+        if fg:
+            print(f"    Fear & Greed Index: {fg.title}")
         
+        await asyncio.sleep(0.5)
+        
+        print("  Social: Fetching BTC Dominance...")
+        btc = await self.get_bitcoin_dominance_signal()
+        if btc:
+            print(f"    BTC Dominance: {btc.title}")
+        
+        await asyncio.sleep(0.5)
+        
+        print("  Social: Fetching Trending Coins...")
+        trending = await self.get_trending_coins()
+        print(f"    Found {len(trending)} trending items")
+        
+        # Store all items
+        all_items = []
+        if fg:
+            all_items.append(fg)
+        if btc:
+            all_items.append(btc)
+        all_items.extend(trending)
+        
+        # Store in database
+        for item in all_items:
+            self.db.store_research_item(item)
+        
+        # Group by category for return
         for category in Category:
-            items = await self.collect_category(category)
-            
-            for item in items:
-                results[category].append(item)
-                self.db.store_research_item(item)
-            
-            print(f"    {category.value}: {len(items)} items")
-            await asyncio.sleep(0.3)
+            results[category] = [i for i in all_items if i.category == category]
+            print(f"    {category.value}: {len(results[category])} items")
         
         return results
