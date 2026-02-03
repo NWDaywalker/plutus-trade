@@ -352,8 +352,8 @@ class TradingBot:
         print(f"      Reason: {reason}")
         
         try:
-            # Place market order
-            result = self.broker.place_market_order(symbol, qty, side)
+            # Place market order with extended hours enabled
+            result = self.broker.place_market_order(symbol, qty, side, extended_hours=True)
             
             if result:
                 self.trades_today += 1
