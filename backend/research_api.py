@@ -31,6 +31,38 @@ collection_running = False
 collection_result = None
 collection_started_at = None
 
+# Detailed progress tracking for each collector
+collection_progress = {
+    "reddit": {"status": "pending", "count": 0, "label": "Reddit"},
+    "news": {"status": "pending", "count": 0, "label": "News"},
+    "prediction_markets": {"status": "pending", "count": 0, "label": "Prediction Markets"},
+    "polymarket": {"status": "pending", "count": 0, "label": "Polymarket"},
+    "kalshi": {"status": "pending", "count": 0, "label": "Kalshi"},
+    "social": {"status": "pending", "count": 0, "label": "Social"},
+}
+
+# Collector order for progress calculation
+COLLECTOR_ORDER = ["reddit", "news", "prediction_markets", "polymarket", "kalshi", "social"]
+
+
+def reset_progress():
+    """Reset all collector progress to pending"""
+    global collection_progress
+    for key in collection_progress:
+        collection_progress[key] = {
+            "status": "pending", 
+            "count": 0, 
+            "label": collection_progress[key]["label"]
+        }
+
+
+def update_progress(collector_name, status, count=0):
+    """Update progress for a specific collector"""
+    global collection_progress
+    if collector_name in collection_progress:
+        collection_progress[collector_name]["status"] = status
+        collection_progress[collector_name]["count"] = count
+
 
 def get_orchestrator():
     global orchestrator
@@ -129,47 +161,36 @@ def get_category_items(category):
 
 @research_bp.route('/signals', methods=['GET'])
 def get_signals():
-    """
-    Get active trading signals
-    Query params:
-        - category: filter by category
-    """
-    category = request.args.get('category')
-    cat = Category(category) if category else None
-    
-    signals = research_db.get_active_signals(category=cat)
-    
+    """Get current trading signals"""
+    signals = research_db.get_recent_signals(hours=24)
     return jsonify({
         'signals': signals,
-        'count': len(signals),
-        'category': category
+        'count': len(signals)
     })
 
 
 @research_bp.route('/signals/<category>', methods=['GET'])
 def get_category_signal(category):
-    """Get signal for a specific category"""
+    """Get trading signal for a specific category"""
     try:
         cat = Category(category)
     except ValueError:
         return jsonify({'error': f'Invalid category: {category}'}), 400
     
-    signals = research_db.get_active_signals(category=cat)
+    orch = get_orchestrator()
+    signal = orch.generate_signal_for_category(cat)
     
-    if not signals:
+    if signal:
         return jsonify({
-            'category': category,
-            'signal': None,
-            'message': 'No active signal for this category'
+            'signal': signal.to_dict(),
+            'has_signal': True
         })
-    
-    # Return the most recent/confident signal
-    signal = signals[0]
-    
-    return jsonify({
-        'category': category,
-        'signal': signal
-    })
+    else:
+        return jsonify({
+            'signal': None,
+            'has_signal': False,
+            'message': 'Insufficient data for signal generation'
+        })
 
 
 @research_bp.route('/signals/generate', methods=['POST'])
@@ -190,26 +211,140 @@ def generate_signals():
 # ============================================================
 
 def run_collection_background():
-    """Run collection in background thread"""
-    global collection_running, collection_result
+    """Run collection in background thread with progress tracking"""
+    global collection_running, collection_result, collection_progress
     
     collection_running = True
     collection_result = None
+    reset_progress()
     
     try:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         orch = get_orchestrator()
-        result = loop.run_until_complete(orch.run_collection())
         
-        # Also generate signals after collection
+        results = {
+            "reddit": {},
+            "news": {},
+            "prediction_markets": {},
+            "polymarket": {},
+            "kalshi": {},
+            "social": {},
+            "total_items": 0,
+            "by_category": {},
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+        # Reddit
+        print("\n📱 Collecting from Reddit...")
+        update_progress("reddit", "running")
+        try:
+            reddit_results = loop.run_until_complete(orch.reddit.collect_all())
+            reddit_count = sum(len(items) for items in reddit_results.values())
+            for cat, items in reddit_results.items():
+                results["reddit"][cat.value] = len(items)
+                results["total_items"] += len(items)
+            update_progress("reddit", "complete", reddit_count)
+            print(f"  ✓ Reddit: {reddit_count} items")
+        except Exception as e:
+            print(f"  ✗ Reddit error: {e}")
+            update_progress("reddit", "error")
+        
+        # News
+        print("\n📰 Collecting from News Sources...")
+        update_progress("news", "running")
+        try:
+            news_results = loop.run_until_complete(orch.news.collect_all())
+            news_count = sum(len(items) for items in news_results.values())
+            for cat, items in news_results.items():
+                results["news"][cat.value] = len(items)
+                results["total_items"] += len(items)
+            update_progress("news", "complete", news_count)
+            print(f"  ✓ News: {news_count} items")
+        except Exception as e:
+            print(f"  ✗ News error: {e}")
+            update_progress("news", "error")
+        
+        # Prediction Markets (Metaculus, Manifold)
+        print("\n🎯 Collecting from Prediction Markets...")
+        update_progress("prediction_markets", "running")
+        try:
+            pm_results = loop.run_until_complete(orch.prediction_markets.collect_all())
+            pm_count = sum(len(items) for items in pm_results.values())
+            for cat, items in pm_results.items():
+                results["prediction_markets"][cat.value] = len(items)
+                results["total_items"] += len(items)
+            update_progress("prediction_markets", "complete", pm_count)
+            print(f"  ✓ Prediction Markets: {pm_count} items")
+        except Exception as e:
+            print(f"  ✗ Prediction Markets error: {e}")
+            update_progress("prediction_markets", "error")
+        
+        # Polymarket
+        print("\n💰 Collecting from Polymarket...")
+        update_progress("polymarket", "running")
+        try:
+            poly_results = loop.run_until_complete(orch.polymarket.collect_all())
+            poly_count = sum(len(items) for items in poly_results.values())
+            for cat, items in poly_results.items():
+                results["polymarket"][cat.value] = len(items)
+                results["total_items"] += len(items)
+            update_progress("polymarket", "complete", poly_count)
+            print(f"  ✓ Polymarket: {poly_count} items")
+        except Exception as e:
+            print(f"  ✗ Polymarket error: {e}")
+            update_progress("polymarket", "error")
+        
+        # Kalshi
+        print("\n🏛️ Collecting from Kalshi...")
+        update_progress("kalshi", "running")
+        try:
+            kalshi_results = loop.run_until_complete(orch.kalshi.collect_all())
+            kalshi_count = sum(len(items) for items in kalshi_results.values())
+            for cat, items in kalshi_results.items():
+                results["kalshi"][cat.value] = len(items)
+                results["total_items"] += len(items)
+            update_progress("kalshi", "complete", kalshi_count)
+            print(f"  ✓ Kalshi: {kalshi_count} items")
+        except Exception as e:
+            print(f"  ✗ Kalshi error (non-fatal): {e}")
+            update_progress("kalshi", "error")
+        
+        # Social
+        print("\n🐦 Collecting from Social Media...")
+        update_progress("social", "running")
+        try:
+            social_results = loop.run_until_complete(orch.social.collect_all())
+            social_count = sum(len(items) for items in social_results.values())
+            for cat, items in social_results.items():
+                results["social"][cat.value] = len(items)
+                results["total_items"] += len(items)
+            update_progress("social", "complete", social_count)
+            print(f"  ✓ Social: {social_count} items")
+        except Exception as e:
+            print(f"  ✗ Social error: {e}")
+            update_progress("social", "error")
+        
+        # Calculate totals by category
+        for category in Category:
+            cat_total = (
+                results["reddit"].get(category.value, 0) +
+                results["news"].get(category.value, 0) +
+                results["prediction_markets"].get(category.value, 0) +
+                results["polymarket"].get(category.value, 0) +
+                results["kalshi"].get(category.value, 0) +
+                results["social"].get(category.value, 0)
+            )
+            results["by_category"][category.value] = cat_total
+        
+        # Generate signals
         print("\n📊 Generating Signals...")
         signals = orch.generate_all_signals()
-        result['signals_generated'] = len(signals)
+        results['signals_generated'] = len(signals)
         
-        collection_result = result
+        collection_result = results
         loop.close()
-        print(f"\n✅ Background collection complete!")
+        print(f"\n✅ Collection complete! Total items: {results['total_items']}")
         
     except Exception as e:
         print(f"\n❌ Collection error: {e}")
@@ -230,7 +365,8 @@ def trigger_collection():
         return jsonify({
             'status': 'already_running',
             'message': 'Collection is already in progress',
-            'started_at': collection_started_at
+            'started_at': collection_started_at,
+            'progress': collection_progress
         })
     
     collection_started_at = datetime.now(timezone.utc).isoformat()
@@ -245,15 +381,44 @@ def trigger_collection():
 
 
 @research_bp.route('/collect/status', methods=['GET'])
-def collection_status():
-    """Check the status of background collection"""
+def get_collection_status():
+    """
+    Check the status of background collection with detailed progress.
+    Returns progress for each collector.
+    """
+    # Calculate overall progress
+    completed = sum(1 for c in collection_progress.values() if c["status"] == "complete")
+    errored = sum(1 for c in collection_progress.values() if c["status"] == "error")
+    total = len(COLLECTOR_ORDER)
+    
+    # Calculate total items collected so far
+    total_items = sum(c["count"] for c in collection_progress.values())
+    
+    # Determine current step
+    current_step = None
+    for collector in COLLECTOR_ORDER:
+        if collection_progress[collector]["status"] == "running":
+            current_step = collector
+            break
+    
     return jsonify({
         'running': collection_running,
         'started_at': collection_started_at,
-        'result': collection_result,
-        'timestamp': datetime.now(timezone.utc).isoformat()
+        'progress': collection_progress,
+        'collectors': COLLECTOR_ORDER,
+        'completed_count': completed,
+        'error_count': errored,
+        'total_count': total,
+        'percent_complete': int((completed / total) * 100) if total > 0 else 0,
+        'current_step': current_step,
+        'total_items': total_items,
+        'result': collection_result if not collection_running else None
     })
 
+
+# ============================================================
+# MONITORING CONTROL
+# ============================================================
 
 @research_bp.route('/monitor/start', methods=['POST'])
 def start_monitoring():
@@ -261,66 +426,73 @@ def start_monitoring():
     global monitoring_thread, monitoring_running
     
     if monitoring_running:
-        return jsonify({'status': 'already_running'})
+        return jsonify({
+            'status': 'already_running',
+            'message': 'Monitoring is already active'
+        })
     
-    interval = request.json.get('interval_minutes', 15) if request.json else 15
+    interval = request.args.get('interval', 15, type=int)
     
-    def monitor_loop():
+    def run_monitor():
         global monitoring_running
         monitoring_running = True
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
             loop.run_until_complete(run_continuous_monitoring(interval))
-        except Exception as e:
-            print(f"Monitoring error: {e}")
         finally:
             monitoring_running = False
             loop.close()
     
-    monitoring_thread = threading.Thread(target=monitor_loop, daemon=True)
+    monitoring_thread = threading.Thread(target=run_monitor, daemon=True)
     monitoring_thread.start()
     
     return jsonify({
-        'status': 'monitoring_started',
+        'status': 'started',
         'interval_minutes': interval
     })
 
 
-@research_bp.route('/monitor/status', methods=['GET'])
-def monitor_status():
-    """Get monitoring status"""
+@research_bp.route('/monitor/stop', methods=['POST'])
+def stop_monitoring():
+    """Stop continuous monitoring"""
+    global monitoring_running
+    monitoring_running = False
     return jsonify({
-        'running': monitoring_running,
-        'timestamp': datetime.now(timezone.utc).isoformat()
+        'status': 'stopping',
+        'message': 'Monitoring will stop after current cycle'
     })
 
 
 # ============================================================
-# SUMMARY ENDPOINTS (for dashboard)
+# DASHBOARD ENDPOINT
 # ============================================================
 
 @research_bp.route('/dashboard', methods=['GET'])
 def get_dashboard():
-    """Get full dashboard data"""
+    """Get complete dashboard data in one call"""
     orch = get_orchestrator()
     
     # Get stats
     stats = research_db.get_research_stats()
     
-    # Get signals for all categories
-    all_signals = research_db.get_active_signals()
+    # Get signals
+    signals = research_db.get_recent_signals(hours=24)
     
-    # Get summaries for each category
+    # Get category summaries
     summaries = {}
-    for cat in Category:
-        summaries[cat.value] = orch.get_category_summary(cat)
+    for category in Category:
+        summaries[category.value] = orch.get_category_summary(category)
+    
+    # Get top items
+    top_items = research_db.get_recent_research(hours=24, limit=20)
     
     return jsonify({
         'stats': stats,
-        'signals': all_signals,
-        'categories': summaries,
-        'monitoring_active': monitoring_running,
+        'signals': signals,
+        'summaries': summaries,
+        'top_items': top_items,
         'collection_running': collection_running,
+        'collection_progress': collection_progress if collection_running else None,
         'timestamp': datetime.now(timezone.utc).isoformat()
     })
