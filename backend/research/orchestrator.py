@@ -18,7 +18,8 @@ from .reddit_collector import RedditCollector
 from .news_collector import NewsCollector
 from .prediction_market_collector import PredictionMarketCollector
 from .polymarket_collector import PolymarketCollector
-from .social_collector import SocialMediaCollector
+from .social_collector import SocialCollector
+from .kalshi_collector import KalshiCollector
 
 
 class ResearchOrchestrator:
@@ -35,7 +36,8 @@ class ResearchOrchestrator:
         self.news = NewsCollector(self.db)
         self.prediction_markets = PredictionMarketCollector(self.db)
         self.polymarket = PolymarketCollector(self.db)
-        self.social = SocialMediaCollector(self.db)
+        self.social = SocialCollector(self.db)
+        self.kalshi = KalshiCollector(self.db)
         
         # Signal generation thresholds
         self.min_sources = 3
@@ -47,6 +49,7 @@ class ResearchOrchestrator:
         await self.prediction_markets.close()
         await self.polymarket.close()
         await self.social.close()
+        await self.kalshi.close()
     
     async def run_collection(self) -> Dict:
         """Run all collectors and return summary"""
@@ -59,6 +62,7 @@ class ResearchOrchestrator:
             "news": {},
             "prediction_markets": {},
             "polymarket": {},
+            "kalshi": {},
             "social": {},
             "total_items": 0,
             "by_category": {},
@@ -87,14 +91,25 @@ class ResearchOrchestrator:
                 results["prediction_markets"][cat.value] = len(items)
                 results["total_items"] += len(items)
             
-            # Polymarket Direct
+            # Polymarket
             print("\n💰 Collecting from Polymarket...")
             poly_results = await self.polymarket.collect_all()
             for cat, items in poly_results.items():
                 results["polymarket"][cat.value] = len(items)
                 results["total_items"] += len(items)
             
-            # Social Media (Twitter/Nitter, Fear & Greed)
+            # Kalshi (US-regulated)
+            print("\n🏛️ Collecting from Kalshi...")
+            try:
+                kalshi_results = await self.kalshi.collect_all()
+                for cat, items in kalshi_results.items():
+                    results["kalshi"][cat.value] = len(items)
+                    results["total_items"] += len(items)
+            except Exception as e:
+                print(f"  Kalshi error (non-fatal): {e}")
+                results["kalshi"]["error"] = str(e)
+            
+            # Social/Sentiment
             print("\n🐦 Collecting from Social Media...")
             social_results = await self.social.collect_all()
             for cat, items in social_results.items():
@@ -108,6 +123,7 @@ class ResearchOrchestrator:
                     results["news"].get(category.value, 0) +
                     results["prediction_markets"].get(category.value, 0) +
                     results["polymarket"].get(category.value, 0) +
+                    results["kalshi"].get(category.value, 0) +
                     results["social"].get(category.value, 0)
                 )
                 results["by_category"][category.value] = cat_total
