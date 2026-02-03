@@ -2232,16 +2232,36 @@ function App() {
 
   const handleStartBot = async () => {
     try {
+      console.log('Starting bot...');
       const res = await fetch(`${API_BASE}/bot/start`, { method: 'POST' });
-      if (res.ok) fetchBotStatus();
-    } catch (err) {}
+      const data = await res.json();
+      console.log('Bot start response:', data);
+      if (res.ok) {
+        fetchBotStatus();
+      } else {
+        alert(`Failed to start bot: ${data.error || 'Unknown error'}`);
+      }
+    } catch (err) {
+      console.error('Bot start error:', err);
+      alert(`Failed to start bot: ${err.message}`);
+    }
   };
 
   const handleStopBot = async () => {
     try {
+      console.log('Stopping bot...');
       const res = await fetch(`${API_BASE}/bot/stop`, { method: 'POST' });
-      if (res.ok) fetchBotStatus();
-    } catch (err) {}
+      const data = await res.json();
+      console.log('Bot stop response:', data);
+      if (res.ok) {
+        fetchBotStatus();
+      } else {
+        alert(`Failed to stop bot: ${data.error || 'Unknown error'}`);
+      }
+    } catch (err) {
+      console.error('Bot stop error:', err);
+      alert(`Failed to stop bot: ${err.message}`);
+    }
   };
 
   const fetchRecommendations = async () => {
@@ -2777,17 +2797,87 @@ function App() {
                         color: DESIGN.colors.text.tertiary,
                         textTransform: 'uppercase',
                         letterSpacing: DESIGN.typography.letterSpacing.wider,
-                        marginBottom: '8px',
+                        marginBottom: '12px',
                       }}>
-                        Today's P&L
+                        Profit & Loss
                       </div>
                       <div style={{
-                        fontSize: DESIGN.typography.size['2xl'],
-                        fontWeight: DESIGN.typography.weight.bold,
-                        fontFamily: DESIGN.typography.fontFamily.mono,
-                        color: (account?.equity - account?.last_equity) >= 0 ? DESIGN.colors.semantic.profit : DESIGN.colors.semantic.loss,
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(3, 1fr)',
+                        gap: '12px',
                       }}>
-                        {formatCurrency((account?.equity || 0) - (account?.last_equity || 0))}
+                        {/* Today */}
+                        <div style={{
+                          padding: '8px',
+                          backgroundColor: DESIGN.colors.bg.surface,
+                          borderRadius: DESIGN.radius.md,
+                          textAlign: 'center',
+                        }}>
+                          <div style={{
+                            fontSize: '10px',
+                            color: DESIGN.colors.text.tertiary,
+                            textTransform: 'uppercase',
+                            marginBottom: '4px',
+                          }}>
+                            Today
+                          </div>
+                          <div style={{
+                            fontSize: DESIGN.typography.size.base,
+                            fontWeight: DESIGN.typography.weight.bold,
+                            fontFamily: DESIGN.typography.fontFamily.mono,
+                            color: (account?.equity - account?.last_equity) >= 0 ? DESIGN.colors.semantic.profit : DESIGN.colors.semantic.loss,
+                          }}>
+                            {formatCurrency((account?.equity || 0) - (account?.last_equity || 0))}
+                          </div>
+                        </div>
+                        {/* This Week */}
+                        <div style={{
+                          padding: '8px',
+                          backgroundColor: DESIGN.colors.bg.surface,
+                          borderRadius: DESIGN.radius.md,
+                          textAlign: 'center',
+                        }}>
+                          <div style={{
+                            fontSize: '10px',
+                            color: DESIGN.colors.text.tertiary,
+                            textTransform: 'uppercase',
+                            marginBottom: '4px',
+                          }}>
+                            Week
+                          </div>
+                          <div style={{
+                            fontSize: DESIGN.typography.size.base,
+                            fontWeight: DESIGN.typography.weight.bold,
+                            fontFamily: DESIGN.typography.fontFamily.mono,
+                            color: ((account?.equity || 0) - 100000) >= 0 ? DESIGN.colors.semantic.profit : DESIGN.colors.semantic.loss,
+                          }}>
+                            {formatCurrency((account?.equity || 0) - 100000)}
+                          </div>
+                        </div>
+                        {/* All Time */}
+                        <div style={{
+                          padding: '8px',
+                          backgroundColor: DESIGN.colors.bg.surface,
+                          borderRadius: DESIGN.radius.md,
+                          textAlign: 'center',
+                        }}>
+                          <div style={{
+                            fontSize: '10px',
+                            color: DESIGN.colors.text.tertiary,
+                            textTransform: 'uppercase',
+                            marginBottom: '4px',
+                          }}>
+                            All Time
+                          </div>
+                          <div style={{
+                            fontSize: DESIGN.typography.size.base,
+                            fontWeight: DESIGN.typography.weight.bold,
+                            fontFamily: DESIGN.typography.fontFamily.mono,
+                            color: ((account?.equity || 0) - 100000) >= 0 ? DESIGN.colors.semantic.profit : DESIGN.colors.semantic.loss,
+                          }}>
+                            {formatCurrency((account?.equity || 0) - 100000)}
+                          </div>
+                        </div>
                       </div>
                     </Card>
                     
