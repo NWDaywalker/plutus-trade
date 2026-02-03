@@ -1,316 +1,318 @@
 """
-Automated Trading Bot
-Executes trades based on predefined strategies with risk management
+Trading Bot - Aggressive multi-strategy automated trading
+Executes actual trades via Alpaca API
 """
 
 import time
-import signal
-import sys
+import threading
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
-from alpaca_broker import AlpacaBroker
-from database import Database
-import os
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
+import random
 
 class TradingBot:
-    def __init__(self, broker: AlpacaBroker, db: Database, config: Dict):
-        """Initialize trading bot with configuration"""
+    """
+    Multi-strategy trading bot that scans for opportunities and executes trades.
+    Supports: Momentum, Mean Reversion, RSI, VWAP strategies
+    """
+    
+    def __init__(self, broker, db, config: Dict):
         self.broker = broker
         self.db = db
         self.config = config
         self.running = False
-        self.positions = {}
+        self.thread = None
         
-        # Safety limits
+        # Strategy allocations (percentages)
+        self.allocations = config.get('allocations', {
+            'momentum': 25,
+            'mean_reversion': 50,
+            'rsi': 15,
+            'vwap': 10
+        })
+        
+        # Trading parameters
+        self.symbols = config.get('symbols', [])
         self.max_position_size = config.get('max_position_size', 1000)  # Max $ per position
-        self.max_daily_loss = config.get('max_daily_loss', 500)  # Max $ loss per day
-        self.max_positions = config.get('max_positions', 5)  # Max open positions
+        self.max_positions = config.get('max_positions', 10)
+        self.max_daily_loss = config.get('max_daily_loss', 500)
+        self.check_interval = config.get('check_interval', 60)  # seconds
+        
+        # Risk management
+        self.stop_loss_pct = config.get('stop_loss_pct', 0.02)  # 2%
+        self.take_profit_pct = config.get('take_profit_pct', 0.05)  # 5%
+        
+        # Tracking
+        self.trades_today = 0
         self.daily_pnl = 0
+        self.start_equity = None
+        self.last_scan_time = None
         
-        # Strategy settings
-        self.strategy = config.get('strategy', 'momentum')
-        self.symbols = config.get('symbols', ['AAPL', 'TSLA', 'NVDA', 'MSFT'])
-        self.check_interval = config.get('check_interval', 60)  # Seconds between checks
-        
-        print(f"🤖 Trading Bot initialized")
-        print(f"   Strategy: {self.strategy}")
-        print(f"   Symbols: {', '.join(self.symbols)}")
-        print(f"   Max Position Size: ${self.max_position_size}")
-        print(f"   Max Daily Loss: ${self.max_daily_loss}")
-        print(f"   Max Positions: {self.max_positions}")
+        print(f"🤖 TradingBot initialized")
+        print(f"   Symbols: {len(self.symbols)}")
+        print(f"   Max position: ${self.max_position_size}")
+        print(f"   Max positions: {self.max_positions}")
+        print(f"   Check interval: {self.check_interval}s")
+        print(f"   Allocations: {self.allocations}")
     
     def start(self):
-        """Start the trading bot"""
+        """Start the trading bot main loop"""
         self.running = True
-        print("\n" + "="*60)
-        print("🚀 TRADING BOT STARTING")
-        print("="*60)
-        print(f"⏰ Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        self.start_equity = self._get_current_equity()
+        print(f"🚀 Trading bot started! Starting equity: ${self.start_equity:,.2f}")
         
-        # Set up graceful shutdown
-        signal.signal(signal.SIGINT, self.signal_handler)
-        
-        try:
-            while self.running:
-                self.run_cycle()
-                if self.running:
-                    time.sleep(self.check_interval)
-        except Exception as e:
-            print(f"\n❌ Bot error: {e}")
-        finally:
-            self.stop()
-    
-    def signal_handler(self, sig, frame):
-        """Handle Ctrl+C gracefully"""
-        print("\n\n⚠️  Shutdown signal received...")
-        self.stop()
+        while self.running:
+            try:
+                self._trading_cycle()
+                time.sleep(self.check_interval)
+            except Exception as e:
+                print(f"❌ Trading cycle error: {e}")
+                time.sleep(5)  # Brief pause on error
     
     def stop(self):
         """Stop the trading bot"""
         self.running = False
-        print("\n" + "="*60)
-        print("🛑 TRADING BOT STOPPED")
-        print("="*60)
-        print(f"⏰ Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        print(f"📊 Today's P&L: ${self.daily_pnl:.2f}")
-        sys.exit(0)
+        print("🛑 Trading bot stopped")
     
-    def run_cycle(self):
-        """Run one trading cycle"""
-        print(f"\n{'='*60}")
-        print(f"🔄 Cycle at {datetime.now().strftime('%H:%M:%S')}")
-        print(f"{'='*60}")
+    def _trading_cycle(self):
+        """Main trading cycle - scan and execute"""
+        self.last_scan_time = datetime.now()
         
-        # Check if we've hit daily loss limit
-        if self.daily_pnl <= -self.max_daily_loss:
-            print(f"⛔ Daily loss limit reached (${self.daily_pnl:.2f}). Stopping bot.")
-            self.stop()
+        # Check daily loss limit
+        current_equity = self._get_current_equity()
+        if self.start_equity:
+            self.daily_pnl = current_equity - self.start_equity
+            if self.daily_pnl <= -self.max_daily_loss:
+                print(f"⚠️ Daily loss limit reached (${self.daily_pnl:.2f}). Pausing trades.")
+                return
+        
+        # Get current positions
+        positions = self.broker.get_positions() or []
+        current_position_count = len(positions)
+        
+        # Check if we can open more positions
+        if current_position_count >= self.max_positions:
+            print(f"📊 Max positions reached ({current_position_count}/{self.max_positions})")
+            self._manage_existing_positions(positions)
             return
         
-        # Update positions
-        self.update_positions()
+        # Scan for opportunities with each active strategy
+        print(f"\n🔍 Scanning {len(self.symbols)} symbols... ({datetime.now().strftime('%H:%M:%S')})")
         
-        # Check existing positions for exit signals
-        self.check_exit_signals()
+        opportunities = []
         
-        # Check for new entry signals
-        if len(self.positions) < self.max_positions:
-            self.check_entry_signals()
-        else:
-            print(f"⚠️  Max positions ({self.max_positions}) reached. Skipping entry signals.")
-    
-    def update_positions(self):
-        """Update current positions from broker"""
-        try:
-            positions = self.broker.get_positions()
-            self.positions = {pos['symbol']: pos for pos in positions}
-            
-            # Calculate daily P&L
-            self.daily_pnl = sum(pos['unrealized_pl'] for pos in positions)
-            
-            print(f"\n📊 Current Status:")
-            print(f"   Open Positions: {len(self.positions)}")
-            print(f"   Daily P&L: ${self.daily_pnl:.2f}")
-            
-            if self.positions:
-                for symbol, pos in self.positions.items():
-                    pnl_pct = pos['unrealized_plpc'] * 100
-                    print(f"   {symbol}: {pos['qty']} shares @ ${pos['current_price']:.2f} "
-                          f"(P&L: ${pos['unrealized_pl']:.2f} / {pnl_pct:.2f}%)")
-        except Exception as e:
-            print(f"❌ Error updating positions: {e}")
-    
-    def check_exit_signals(self):
-        """Check if any positions should be closed"""
-        for symbol, position in list(self.positions.items()):
-            try:
-                # Get current data
-                bars = self.broker.get_bars(symbol, "5Min", 20)
-                if not bars or len(bars) < 10:
-                    continue
-                
-                # Check stop loss (2% loss)
-                pnl_pct = position['unrealized_plpc']
-                if pnl_pct <= -0.02:  # -2%
-                    print(f"\n🛑 STOP LOSS triggered for {symbol} at {pnl_pct*100:.2f}%")
-                    self.close_position(symbol, position['qty'], "Stop Loss")
-                    continue
-                
-                # Check take profit (5% gain)
-                if pnl_pct >= 0.05:  # +5%
-                    print(f"\n💰 TAKE PROFIT triggered for {symbol} at {pnl_pct*100:.2f}%")
-                    self.close_position(symbol, position['qty'], "Take Profit")
-                    continue
-                
-                # Strategy-specific exit signals
-                if self.strategy == 'momentum':
-                    if self.check_momentum_exit(symbol, bars):
-                        print(f"\n📉 Momentum EXIT signal for {symbol}")
-                        self.close_position(symbol, position['qty'], "Momentum Exit")
-                
-                elif self.strategy == 'mean_reversion':
-                    if self.check_mean_reversion_exit(symbol, bars):
-                        print(f"\n📉 Mean Reversion EXIT signal for {symbol}")
-                        self.close_position(symbol, position['qty'], "Mean Reversion Exit")
-                
-            except Exception as e:
-                print(f"❌ Error checking exit for {symbol}: {e}")
-    
-    def check_entry_signals(self):
-        """Check for new entry opportunities"""
         for symbol in self.symbols:
-            # Skip if already have position
-            if symbol in self.positions:
+            # Skip if we already have a position
+            if any(p['symbol'] == symbol for p in positions):
                 continue
             
-            try:
-                # Get market data
-                bars = self.broker.get_bars(symbol, "5Min", 50)
-                if not bars or len(bars) < 20:
-                    continue
-                
-                # Check strategy signal
-                signal = False
-                if self.strategy == 'momentum':
-                    signal = self.check_momentum_entry(symbol, bars)
-                elif self.strategy == 'mean_reversion':
-                    signal = self.check_mean_reversion_entry(symbol, bars)
-                elif self.strategy == 'rsi':
-                    signal = self.check_rsi_entry(symbol, bars)
-                elif self.strategy == 'ma_crossover':
-                    signal = self.check_ma_crossover_entry(symbol, bars)
-                
+            # Get market data
+            bars = self._get_bars(symbol, limit=50)
+            if not bars or len(bars) < 20:
+                continue
+            
+            # Run each strategy
+            if self.allocations.get('momentum', 0) > 0:
+                signal = self._momentum_strategy(symbol, bars)
                 if signal:
-                    print(f"\n✅ ENTRY signal for {symbol}")
-                    self.open_position(symbol)
-                    time.sleep(2)  # Brief pause between orders
-                
-            except Exception as e:
-                print(f"❌ Error checking entry for {symbol}: {e}")
+                    signal['strategy'] = 'momentum'
+                    opportunities.append(signal)
+            
+            if self.allocations.get('mean_reversion', 0) > 0:
+                signal = self._mean_reversion_strategy(symbol, bars)
+                if signal:
+                    signal['strategy'] = 'mean_reversion'
+                    opportunities.append(signal)
+            
+            if self.allocations.get('rsi', 0) > 0:
+                signal = self._rsi_strategy(symbol, bars)
+                if signal:
+                    signal['strategy'] = 'rsi'
+                    opportunities.append(signal)
+            
+            if self.allocations.get('vwap', 0) > 0:
+                signal = self._vwap_strategy(symbol, bars)
+                if signal:
+                    signal['strategy'] = 'vwap'
+                    opportunities.append(signal)
+        
+        # Sort by signal strength and execute top opportunities
+        opportunities.sort(key=lambda x: x.get('strength', 0), reverse=True)
+        
+        slots_available = self.max_positions - current_position_count
+        to_execute = opportunities[:slots_available]
+        
+        print(f"   Found {len(opportunities)} opportunities, executing top {len(to_execute)}")
+        
+        for opp in to_execute:
+            self._execute_trade(opp)
+        
+        # Manage existing positions (check stop loss / take profit)
+        self._manage_existing_positions(positions)
     
-    def check_momentum_entry(self, symbol: str, bars: List[Dict]) -> bool:
-        """Momentum strategy: Buy on strong upward movement"""
+    def _get_bars(self, symbol: str, limit: int = 50) -> List[Dict]:
+        """Get recent price bars for a symbol"""
+        try:
+            return self.broker.get_bars(symbol, timeframe='1Hour', limit=limit)
+        except Exception as e:
+            return None
+    
+    def _get_current_equity(self) -> float:
+        """Get current account equity"""
+        try:
+            account = self.broker.get_account()
+            return float(account.get('equity', 0)) if account else 0
+        except:
+            return 0
+    
+    # ═══════════════════════════════════════════════════════════════════════════
+    # STRATEGIES
+    # ═══════════════════════════════════════════════════════════════════════════
+    
+    def _momentum_strategy(self, symbol: str, bars: List[Dict]) -> Optional[Dict]:
+        """
+        Momentum Breakout Strategy
+        Buy when price breaks above 20-period high with volume confirmation
+        """
         if len(bars) < 20:
-            return False
+            return None
         
-        prices = [bar['close'] for bar in bars[-20:]]
+        closes = [b['close'] for b in bars]
+        volumes = [b['volume'] for b in bars]
         
-        # Calculate short-term momentum (last 5 bars)
-        recent_change = (prices[-1] - prices[-6]) / prices[-6]
-        
-        # Calculate volume surge
-        volumes = [bar['volume'] for bar in bars[-10:]]
-        avg_volume = sum(volumes[:-1]) / len(volumes[:-1])
+        current_price = closes[-1]
+        high_20 = max(closes[-20:])
+        avg_volume = sum(volumes[-20:]) / 20
         current_volume = volumes[-1]
-        volume_ratio = current_volume / avg_volume if avg_volume > 0 else 0
         
-        # Entry: Price up 1%+ in last 5 bars with volume surge
-        if recent_change > 0.01 and volume_ratio > 1.5:
-            print(f"   📈 {symbol} momentum: +{recent_change*100:.2f}%, volume {volume_ratio:.1f}x")
-            return True
+        # Breakout condition: price at/near 20-day high with above-average volume
+        if current_price >= high_20 * 0.99 and current_volume > avg_volume * 1.2:
+            strength = (current_volume / avg_volume) * (current_price / high_20)
+            return {
+                'symbol': symbol,
+                'side': 'buy',
+                'price': current_price,
+                'strength': strength,
+                'reason': f'Breakout above 20-period high (${high_20:.2f}) with {current_volume/avg_volume:.1f}x volume'
+            }
         
-        return False
+        return None
     
-    def check_momentum_exit(self, symbol: str, bars: List[Dict]) -> bool:
-        """Momentum exit: Sell when momentum reverses"""
-        if len(bars) < 10:
-            return False
-        
-        prices = [bar['close'] for bar in bars[-10:]]
-        recent_change = (prices[-1] - prices[-4]) / prices[-4]
-        
-        # Exit if losing momentum (down 0.5% in last 3 bars)
-        return recent_change < -0.005
-    
-    def check_mean_reversion_entry(self, symbol: str, bars: List[Dict]) -> bool:
-        """Mean Reversion: Buy dips from average"""
+    def _mean_reversion_strategy(self, symbol: str, bars: List[Dict]) -> Optional[Dict]:
+        """
+        Mean Reversion Strategy
+        Buy when price is significantly below moving average, expecting bounce
+        """
         if len(bars) < 20:
-            return False
+            return None
         
-        prices = [bar['close'] for bar in bars[-20:]]
-        avg_price = sum(prices) / len(prices)
-        current_price = prices[-1]
+        closes = [b['close'] for b in bars]
         
-        # Calculate standard deviation
-        variance = sum((p - avg_price) ** 2 for p in prices) / len(prices)
-        std_dev = variance ** 0.5
+        current_price = closes[-1]
+        sma_20 = sum(closes[-20:]) / 20
         
-        # Entry: Price is 1.5 std devs below average
-        z_score = (current_price - avg_price) / std_dev if std_dev > 0 else 0
+        # Calculate how far below the MA we are
+        deviation = (current_price - sma_20) / sma_20
         
-        if z_score < -1.5:
-            print(f"   📉 {symbol} oversold: Z-score {z_score:.2f}")
-            return True
+        # Buy if price is 3%+ below 20-day MA
+        if deviation < -0.03:
+            strength = abs(deviation) * 10  # Higher deviation = stronger signal
+            return {
+                'symbol': symbol,
+                'side': 'buy',
+                'price': current_price,
+                'strength': strength,
+                'reason': f'Price {abs(deviation)*100:.1f}% below 20-SMA (${sma_20:.2f}), expecting reversion'
+            }
         
-        return False
+        return None
     
-    def check_mean_reversion_exit(self, symbol: str, bars: List[Dict]) -> bool:
-        """Mean Reversion exit: Sell when back to average"""
-        if len(bars) < 20:
-            return False
-        
-        prices = [bar['close'] for bar in bars[-20:]]
-        avg_price = sum(prices) / len(prices)
-        current_price = prices[-1]
-        
-        # Exit if price is back above average
-        return current_price >= avg_price
-    
-    def check_rsi_entry(self, symbol: str, bars: List[Dict]) -> bool:
-        """RSI Strategy: Buy when oversold"""
+    def _rsi_strategy(self, symbol: str, bars: List[Dict]) -> Optional[Dict]:
+        """
+        RSI Oversold Strategy
+        Buy when RSI drops below 30 (oversold)
+        """
         if len(bars) < 15:
-            return False
+            return None
+        
+        closes = [b['close'] for b in bars]
         
         # Calculate RSI
-        rsi = self.calculate_rsi([bar['close'] for bar in bars], 14)
+        rsi = self._calculate_rsi(closes, period=14)
         
-        if rsi < 30:  # Oversold
-            print(f"   📊 {symbol} RSI: {rsi:.1f} (Oversold)")
-            return True
+        if rsi is None:
+            return None
         
-        return False
+        current_price = closes[-1]
+        
+        # Buy if RSI is oversold (below 30)
+        if rsi < 30:
+            strength = (30 - rsi) / 10  # Lower RSI = stronger signal
+            return {
+                'symbol': symbol,
+                'side': 'buy',
+                'price': current_price,
+                'strength': strength,
+                'reason': f'RSI oversold at {rsi:.1f}'
+            }
+        
+        return None
     
-    def check_ma_crossover_entry(self, symbol: str, bars: List[Dict]) -> bool:
-        """Moving Average Crossover: Buy when fast MA crosses above slow MA"""
-        if len(bars) < 50:
-            return False
+    def _vwap_strategy(self, symbol: str, bars: List[Dict]) -> Optional[Dict]:
+        """
+        VWAP Bounce Strategy
+        Buy when price dips to or below VWAP
+        """
+        if len(bars) < 10:
+            return None
         
-        prices = [bar['close'] for bar in bars]
+        # Calculate VWAP (simplified - using available bars)
+        total_volume = 0
+        total_vp = 0  # volume * price
         
-        # Calculate MAs
-        fast_ma = sum(prices[-10:]) / 10  # 10-period MA
-        slow_ma = sum(prices[-30:]) / 30  # 30-period MA
+        for bar in bars[-10:]:
+            typical_price = (bar['high'] + bar['low'] + bar['close']) / 3
+            total_vp += typical_price * bar['volume']
+            total_volume += bar['volume']
         
-        prev_fast_ma = sum(prices[-11:-1]) / 10
-        prev_slow_ma = sum(prices[-31:-1]) / 30
+        if total_volume == 0:
+            return None
         
-        # Golden cross: fast MA crosses above slow MA
-        if prev_fast_ma <= prev_slow_ma and fast_ma > slow_ma:
-            print(f"   ✨ {symbol} Golden Cross: Fast MA ${fast_ma:.2f} > Slow MA ${slow_ma:.2f}")
-            return True
+        vwap = total_vp / total_volume
+        current_price = bars[-1]['close']
         
-        return False
+        # Buy if price is at or below VWAP
+        if current_price <= vwap * 1.005:  # Within 0.5% of VWAP
+            deviation = (vwap - current_price) / vwap
+            strength = max(0.5, deviation * 20)
+            return {
+                'symbol': symbol,
+                'side': 'buy',
+                'price': current_price,
+                'strength': strength,
+                'reason': f'Price at VWAP support (${vwap:.2f})'
+            }
+        
+        return None
     
-    def calculate_rsi(self, prices: List[float], period: int = 14) -> float:
-        """Calculate Relative Strength Index"""
-        if len(prices) < period + 1:
-            return 50
+    def _calculate_rsi(self, closes: List[float], period: int = 14) -> Optional[float]:
+        """Calculate RSI indicator"""
+        if len(closes) < period + 1:
+            return None
         
         gains = []
         losses = []
         
-        for i in range(1, len(prices)):
-            change = prices[i] - prices[i-1]
+        for i in range(1, len(closes)):
+            change = closes[i] - closes[i-1]
             if change > 0:
                 gains.append(change)
                 losses.append(0)
             else:
                 gains.append(0)
                 losses.append(abs(change))
+        
+        if len(gains) < period:
+            return None
         
         avg_gain = sum(gains[-period:]) / period
         avg_loss = sum(losses[-period:]) / period
@@ -323,125 +325,91 @@ class TradingBot:
         
         return rsi
     
-    def open_position(self, symbol: str):
-        """Open a new position"""
+    # ═══════════════════════════════════════════════════════════════════════════
+    # TRADE EXECUTION
+    # ═══════════════════════════════════════════════════════════════════════════
+    
+    def _execute_trade(self, opportunity: Dict):
+        """Execute a trade based on opportunity signal"""
+        symbol = opportunity['symbol']
+        side = opportunity['side']
+        price = opportunity['price']
+        strategy = opportunity.get('strategy', 'unknown')
+        reason = opportunity.get('reason', '')
+        
+        # Calculate position size based on strategy allocation
+        allocation_pct = self.allocations.get(strategy, 25) / 100
+        position_value = min(self.max_position_size * allocation_pct * 2, self.max_position_size)
+        
+        # Calculate shares
+        qty = int(position_value / price)
+        if qty < 1:
+            print(f"   ⚠️ {symbol}: Position too small (${position_value:.2f} / ${price:.2f})")
+            return
+        
+        print(f"\n   📈 EXECUTING: {side.upper()} {qty} {symbol} @ ~${price:.2f}")
+        print(f"      Strategy: {strategy}")
+        print(f"      Reason: {reason}")
+        
         try:
-            # Get current quote
-            quote = self.broker.get_quote(symbol)
-            if not quote:
-                print(f"❌ Could not get quote for {symbol}")
-                return
-            
-            ask_price = quote['ask']
-            
-            # Calculate position size (max $1000 per position)
-            qty = int(self.max_position_size / ask_price)
-            if qty < 1:
-                qty = 1
-            
-            print(f"   💵 Opening {qty} shares of {symbol} @ ${ask_price:.2f}")
-            
             # Place market order
-            order = self.broker.place_market_order(symbol, qty, 'buy')
+            result = self.broker.place_market_order(symbol, qty, side)
             
-            if order:
-                print(f"   ✅ Order placed: {order['order_id']}")
+            if result:
+                self.trades_today += 1
+                print(f"   ✅ Order placed! ID: {result.get('id', 'N/A')}")
                 
-                # Save to database
+                # Log to database
                 self.db.save_trade({
                     'symbol': symbol,
-                    'side': 'buy',
+                    'side': side,
                     'qty': qty,
-                    'price': ask_price,
-                    'order_type': 'market',
-                    'status': order['status'],
-                    'order_id': str(order['order_id'])
+                    'price': price,
+                    'strategy': strategy,
+                    'order_id': result.get('id'),
+                    'status': 'submitted'
                 })
             else:
-                print(f"   ❌ Failed to place order")
+                print(f"   ❌ Order failed")
                 
         except Exception as e:
-            print(f"❌ Error opening position for {symbol}: {e}")
+            print(f"   ❌ Trade execution error: {e}")
     
-    def close_position(self, symbol: str, qty: float, reason: str):
-        """Close an existing position"""
+    def _manage_existing_positions(self, positions: List[Dict]):
+        """Check existing positions for stop loss / take profit"""
+        for pos in positions:
+            symbol = pos['symbol']
+            qty = float(pos['qty'])
+            entry_price = float(pos['avg_entry_price'])
+            current_price = float(pos['current_price'])
+            unrealized_pnl_pct = float(pos.get('unrealized_plpc', 0))
+            
+            # Check stop loss
+            if unrealized_pnl_pct <= -self.stop_loss_pct:
+                print(f"\n   🛑 STOP LOSS: {symbol} at {unrealized_pnl_pct*100:.1f}%")
+                self._close_position(symbol, qty, 'stop_loss')
+            
+            # Check take profit
+            elif unrealized_pnl_pct >= self.take_profit_pct:
+                print(f"\n   🎯 TAKE PROFIT: {symbol} at +{unrealized_pnl_pct*100:.1f}%")
+                self._close_position(symbol, qty, 'take_profit')
+    
+    def _close_position(self, symbol: str, qty: float, reason: str):
+        """Close a position"""
         try:
-            print(f"   💵 Closing {qty} shares of {symbol} - Reason: {reason}")
-            
-            # Place market sell order
-            order = self.broker.place_market_order(symbol, qty, 'sell')
-            
-            if order:
-                print(f"   ✅ Position closed: {order['order_id']}")
-                
-                # Save to database
-                self.db.save_trade({
-                    'symbol': symbol,
-                    'side': 'sell',
-                    'qty': qty,
-                    'price': 0,
-                    'order_type': 'market',
-                    'status': order['status'],
-                    'order_id': str(order['order_id'])
-                })
-                
-                # Remove from positions
-                if symbol in self.positions:
-                    del self.positions[symbol]
-            else:
-                print(f"   ❌ Failed to close position")
-                
+            result = self.broker.place_market_order(symbol, int(qty), 'sell')
+            if result:
+                print(f"   ✅ Closed {symbol} ({reason})")
+                self.trades_today += 1
         except Exception as e:
-            print(f"❌ Error closing position for {symbol}: {e}")
-
-
-def main():
-    """Main bot entry point"""
-    print("\n" + "="*60)
-    print("🤖 AUTOMATED TRADING BOT")
-    print("="*60)
-    print("⚠️  PAPER TRADING MODE - No real money at risk")
-    print("="*60 + "\n")
+            print(f"   ❌ Failed to close {symbol}: {e}")
     
-    # Load credentials
-    api_key = os.getenv('ALPACA_API_KEY')
-    secret_key = os.getenv('ALPACA_SECRET_KEY')
-    
-    if not api_key or not secret_key:
-        print("❌ API keys not found. Please configure .env file.")
-        return
-    
-    # Initialize components
-    broker = AlpacaBroker(api_key, secret_key)
-    db = Database(os.getenv('DATABASE_PATH', '../data/trading.db'))
-    
-    # Load bot configuration from bot_config.py
-    try:
-        import bot_config
-        config = {
-            'strategy': bot_config.STRATEGY,
-            'symbols': bot_config.SYMBOLS,
-            'max_position_size': bot_config.MAX_POSITION_SIZE,
-            'max_daily_loss': bot_config.MAX_DAILY_LOSS,
-            'max_positions': bot_config.MAX_POSITIONS,
-            'check_interval': bot_config.CHECK_INTERVAL
+    def get_status(self) -> Dict:
+        """Get current bot status"""
+        return {
+            'running': self.running,
+            'trades_today': self.trades_today,
+            'daily_pnl': self.daily_pnl,
+            'last_scan': self.last_scan_time.isoformat() if self.last_scan_time else None,
+            'allocations': self.allocations
         }
-        print(f"✅ Loaded config: {len(config['symbols'])} symbols, max {config['max_positions']} positions")
-    except ImportError:
-        print("⚠️  bot_config.py not found, using defaults")
-        config = {
-            'strategy': 'momentum',
-            'symbols': ['AAPL', 'TSLA', 'NVDA', 'MSFT', 'GOOGL'],
-            'max_position_size': 1000,
-            'max_daily_loss': 500,
-            'max_positions': 3,
-            'check_interval': 60
-        }
-    
-    # Create and start bot
-    bot = TradingBot(broker, db, config)
-    bot.start()
-
-
-if __name__ == '__main__':
-    main()
