@@ -80,10 +80,19 @@ class AlpacaBroker:
     def get_orders(self, status='all'):
         """Get orders"""
         try:
+            from alpaca.trading.requests import GetOrdersRequest
+            from alpaca.trading.enums import QueryOrderStatus
+            
             if status == 'all':
                 orders = self.trading_client.get_orders()
+            elif status == 'open':
+                request = GetOrdersRequest(status=QueryOrderStatus.OPEN)
+                orders = self.trading_client.get_orders(filter=request)
+            elif status == 'closed':
+                request = GetOrdersRequest(status=QueryOrderStatus.CLOSED)
+                orders = self.trading_client.get_orders(filter=request)
             else:
-                orders = self.trading_client.get_orders(filter=status)
+                orders = self.trading_client.get_orders()
             
             return [{
                 'id': str(o.id),
