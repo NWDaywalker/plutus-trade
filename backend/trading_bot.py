@@ -105,6 +105,8 @@ class TradingBot:
         print(f"\n🔍 Scanning {len(self.symbols)} symbols... ({datetime.now().strftime('%H:%M:%S')})")
         
         opportunities = []
+        symbols_with_data = 0
+        symbols_without_data = 0
         
         for symbol in self.symbols:
             # Skip if we already have a position
@@ -114,7 +116,10 @@ class TradingBot:
             # Get market data
             bars = self._get_bars(symbol, limit=50)
             if not bars or len(bars) < 20:
+                symbols_without_data += 1
                 continue
+            
+            symbols_with_data += 1
             
             # Run each strategy
             if self.allocations.get('momentum', 0) > 0:
@@ -147,6 +152,7 @@ class TradingBot:
         slots_available = self.max_positions - current_position_count
         to_execute = opportunities[:slots_available]
         
+        print(f"   Symbols with data: {symbols_with_data}, without: {symbols_without_data}")
         print(f"   Found {len(opportunities)} opportunities, executing top {len(to_execute)}")
         
         for opp in to_execute:
@@ -219,8 +225,8 @@ class TradingBot:
         # Calculate how far below the MA we are
         deviation = (current_price - sma_20) / sma_20
         
-        # Buy if price is 3%+ below 20-day MA
-        if deviation < -0.03:
+        # Buy if price is 2%+ below 20-day MA (more aggressive)
+        if deviation < -0.02:
             strength = abs(deviation) * 10  # Higher deviation = stronger signal
             return {
                 'symbol': symbol,
@@ -235,7 +241,7 @@ class TradingBot:
     def _rsi_strategy(self, symbol: str, bars: List[Dict]) -> Optional[Dict]:
         """
         RSI Oversold Strategy
-        Buy when RSI drops below 30 (oversold)
+        Buy when RSI drops below 35 (oversold)
         """
         if len(bars) < 15:
             return None
@@ -250,9 +256,9 @@ class TradingBot:
         
         current_price = closes[-1]
         
-        # Buy if RSI is oversold (below 30)
-        if rsi < 30:
-            strength = (30 - rsi) / 10  # Lower RSI = stronger signal
+        # Buy if RSI is oversold (below 35 - more aggressive)
+        if rsi < 35:
+            strength = (35 - rsi) / 10  # Lower RSI = stronger signal
             return {
                 'symbol': symbol,
                 'side': 'buy',
@@ -266,7 +272,7 @@ class TradingBot:
     def _vwap_strategy(self, symbol: str, bars: List[Dict]) -> Optional[Dict]:
         """
         VWAP Bounce Strategy
-        Buy when price dips to or below VWAP
+        Buy when price is at or below VWAP
         """
         if len(bars) < 10:
             return None
@@ -286,16 +292,16 @@ class TradingBot:
         vwap = total_vp / total_volume
         current_price = bars[-1]['close']
         
-        # Buy if price is at or below VWAP
-        if current_price <= vwap * 1.005:  # Within 0.5% of VWAP
+        # Buy if price is at or up to 1% above VWAP (more aggressive)
+        if current_price <= vwap * 1.01:
             deviation = (vwap - current_price) / vwap
-            strength = max(0.5, deviation * 20)
+            strength = max(0.5, deviation * 20 + 0.3)
             return {
                 'symbol': symbol,
                 'side': 'buy',
                 'price': current_price,
                 'strength': strength,
-                'reason': f'Price at VWAP support (${vwap:.2f})'
+                'reason': f'Price near VWAP support (${vwap:.2f})'
             }
         
         return None
