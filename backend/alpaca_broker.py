@@ -302,3 +302,136 @@ class AlpacaBroker:
         except Exception as e:
             print(f"Error getting quote for {symbol}: {e}")
             return None
+    
+    def get_snapshots(self, symbols: list):
+        """Get current snapshots for multiple symbols (price + daily change)"""
+        try:
+            from alpaca.data.requests import StockSnapshotRequest
+            
+            request = StockSnapshotRequest(symbol_or_symbols=symbols)
+            snapshots = self.data_client.get_stock_snapshot(request)
+            
+            results = []
+            for symbol, snap in snapshots.items():
+                if snap and snap.daily_bar and snap.previous_daily_bar:
+                    current_close = float(snap.daily_bar.close)
+                    prev_close = float(snap.previous_daily_bar.close)
+                    change = current_close - prev_close
+                    change_pct = (change / prev_close) * 100 if prev_close else 0
+                    
+                    results.append({
+                        'symbol': symbol,
+                        'price': current_close,
+                        'change': change,
+                        'change_pct': change_pct,
+                        'volume': int(snap.daily_bar.volume) if snap.daily_bar.volume else 0,
+                        'high': float(snap.daily_bar.high),
+                        'low': float(snap.daily_bar.low),
+                        'open': float(snap.daily_bar.open),
+                    })
+            
+            return results
+        except Exception as e:
+            print(f"Error getting snapshots: {e}")
+            return []
+    
+    def get_top_movers(self, symbols: list = None):
+        """Get top gainers and losers from a list of symbols"""
+        # Default watchlist if none provided
+        if not symbols:
+            symbols = [
+                # Tech
+                'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'NVDA', 'TSLA', 'AMD', 'INTC', 'CRM',
+                # Finance
+                'JPM', 'BAC', 'GS', 'V', 'MA', 'PYPL',
+                # Healthcare
+                'JNJ', 'PFE', 'UNH', 'ABBV', 'MRK', 'LLY',
+                # Consumer
+                'WMT', 'COST', 'HD', 'NKE', 'SBUX', 'MCD', 'DIS', 'NFLX',
+                # Energy
+                'XOM', 'CVX', 'COP',
+                # Industrial
+                'CAT', 'BA', 'GE', 'HON',
+            ]
+        
+        try:
+            snapshots = self.get_snapshots(symbols)
+            
+            if not snapshots:
+                return {'gainers': [], 'losers': []}
+            
+            # Sort by change percentage
+            sorted_by_change = sorted(snapshots, key=lambda x: x['change_pct'], reverse=True)
+            
+            # Top 5 gainers and losers
+            gainers = [s for s in sorted_by_change if s['change_pct'] > 0][:5]
+            losers = [s for s in sorted_by_change if s['change_pct'] < 0][-5:][::-1]  # Reverse to get worst first
+            
+            return {
+                'gainers': gainers,
+                'losers': losers
+            }
+        except Exception as e:
+            print(f"Error getting top movers: {e}")
+            return {'gainers': [], 'losers': []}
+    
+    def get_market_indices(self):
+        """Get major market indices (SPY, QQQ, DIA as proxies)"""
+        try:
+            indices = ['SPY', 'QQQ', 'DIA']
+            snapshots = self.get_snapshots(indices)
+            
+            # Map ETFs to index names and approximate values
+            index_map = {
+                'SPY': {'name': 'S&P 500', 'multiplier': 10},
+                'QQQ': {'name': 'NASDAQ', 'multiplier': 43},
+                'DIA': {'name': 'DOW', 'multiplier': 100},
+            }
+            
+            results = []
+            for snap in snapshots:
+                symbol = snap['symbol']
+                if symbol in index_map:
+                    results.append({
+                        'name': index_map[symbol]['name'],
+                        'symbol': symbol,
+                        'value': snap['price'] * index_map[symbol]['multiplier'],
+                        'change_pct': snap['change_pct'],
+                        'price': snap['price'],
+                    })
+            
+            return results
+        except Exception as e:
+            print(f"Error getting market indices: {e}")
+            return []
+    
+    def get_market_stats(self, symbols: list = None):
+        """Get overall market statistics"""
+        if not symbols:
+            symbols = [
+                'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'NVDA', 'TSLA', 'AMD', 'INTC',
+                'JPM', 'BAC', 'GS', 'V', 'MA', 'JNJ', 'PFE', 'UNH', 'WMT', 'HD',
+                'XOM', 'CVX', 'CAT', 'BA', 'DIS', 'NFLX', 'NKE', 'SBUX', 'MCD', 'COST'
+            ]
+        
+        try:
+            snapshots = self.get_snapshots(symbols)
+            
+            if not snapshots:
+                return {}
+            
+            total_volume = sum(s['volume'] for s in snapshots)
+            advancers = sum(1 for s in snapshots if s['change_pct'] > 0)
+            decliners = sum(1 for s in snapshots if s['change_pct'] < 0)
+            unchanged = len(snapshots) - advancers - decliners
+            
+            return {
+                'total_volume': total_volume,
+                'advancers': advancers,
+                'decliners': decliners,
+                'unchanged': unchanged,
+                'total_symbols': len(snapshots)
+            }
+        except Exception as e:
+            print(f"Error getting market stats: {e}")
+            return {}
