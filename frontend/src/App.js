@@ -2347,7 +2347,26 @@ function App() {
       backgroundColor: DESIGN.colors.bg.void,
       color: DESIGN.colors.text.primary,
       fontFamily: DESIGN.typography.fontFamily.body,
+      position: 'relative',
     }}>
+      {/* Background Image */}
+      <div style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundImage: 'url(https://wallpapercave.com/wp/wp5799725.jpg)',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center bottom',
+        backgroundRepeat: 'no-repeat',
+        opacity: 0.15,
+        zIndex: 0,
+        pointerEvents: 'none',
+      }} />
+      
+      {/* Content wrapper */}
+      <div style={{ position: 'relative', zIndex: 1 }}>
       {/* CSS Animations */}
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
@@ -3995,6 +4014,7 @@ function App() {
             </>
           )}
         </main>
+      </div>
       </div>
     </div>
   );
