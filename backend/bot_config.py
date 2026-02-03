@@ -1,102 +1,62 @@
-# Trading Bot Configuration
-# Edit these settings to customize your bot's behavior
+"""
+Bot Configuration - Aggressive Trading Settings
+"""
 
-# STRATEGY SELECTION
-# Choose one: 'momentum', 'mean_reversion', 'rsi', 'ma_crossover'
-STRATEGY = 'momentum'
+# Active strategy (can be: momentum, mean_reversion, rsi, vwap, or 'all' for multi-strategy)
+STRATEGY = 'all'
 
-# SYMBOLS TO TRADE - EXPANDED TO 100+ STOCKS
-# More symbols = more opportunities across different sectors
+# Strategy allocations (percentages - should sum to 100 or less)
+ALLOCATIONS = {
+    'momentum': 25,
+    'mean_reversion': 50,
+    'rsi': 15,
+    'vwap': 10
+}
+
+# Stock universe - diverse mix across sectors
 SYMBOLS = [
-    # Mega Cap Tech
-    'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'NVDA', 'TSLA',
+    # Tech Giants
+    'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'NVDA', 'TSLA', 'AMD', 'INTC', 'CRM',
     
-    # Tech & Semiconductors
-    'AMD', 'INTC', 'QCOM', 'AVGO', 'CSCO', 'ORCL', 'CRM', 'ADBE', 'NOW', 'SNOW',
-    'MU', 'AMAT', 'LRCX', 'KLAC', 'ASML', 'TSM',
+    # Finance
+    'JPM', 'BAC', 'GS', 'MS', 'V', 'MA', 'PYPL', 'SQ', 'COIN', 'HOOD',
     
-    # Social Media & Communication
-    'NFLX', 'DIS', 'SNAP', 'PINS', 'SPOT', 'RBLX', 'U', 'ZM',
+    # Healthcare
+    'JNJ', 'PFE', 'UNH', 'ABBV', 'MRK', 'LLY', 'BMY', 'AMGN', 'GILD', 'MRNA',
     
-    # E-commerce & Retail
-    'SHOP', 'ETSY', 'EBAY', 'WMT', 'TGT', 'COST', 'HD', 'LOW', 'NKE', 'LULU',
+    # Consumer
+    'WMT', 'COST', 'TGT', 'HD', 'LOW', 'NKE', 'SBUX', 'MCD', 'DIS', 'NFLX',
     
-    # Finance & Fintech
-    'JPM', 'BAC', 'WFC', 'GS', 'MS', 'C', 'V', 'MA', 'PYPL', 'SQ', 'COIN', 'HOOD',
+    # Energy
+    'XOM', 'CVX', 'COP', 'SLB', 'EOG', 'OXY', 'PSX', 'VLO', 'MPC', 'DVN',
     
-    # EV & Auto
-    'F', 'GM', 'RIVN', 'LCID', 'NIO', 'XPEV', 'LI',
+    # Industrials
+    'CAT', 'DE', 'BA', 'LMT', 'RTX', 'GE', 'HON', 'UPS', 'FDX', 'MMM',
     
-    # Healthcare & Biotech
-    'JNJ', 'PFE', 'UNH', 'ABBV', 'LLY', 'MRK', 'BMY', 'GILD', 'AMGN', 'BIIB',
-    'MRNA', 'BNTX', 'REGN', 'VRTX',
+    # Materials / Mining
+    'FCX', 'NEM', 'GOLD', 'CLF', 'X', 'AA', 'NUE', 'STLD',
     
-    # Energy & Oil
-    'XOM', 'CVX', 'COP', 'SLB', 'EOG', 'OXY', 'PSX', 'MPC',
+    # ETFs for broader exposure
+    'SPY', 'QQQ', 'IWM', 'DIA', 'XLF', 'XLE', 'XLK', 'GLD', 'SLV', 'TLT',
     
-    # Aerospace & Defense
-    'BA', 'LMT', 'RTX', 'NOC', 'GD',
+    # High volatility / momentum plays
+    'PLTR', 'SOFI', 'RIVN', 'LCID', 'NIO', 'PLUG', 'FCEL', 'SPCE',
     
-    # Consumer & Food
-    'KO', 'PEP', 'MCD', 'SBUX', 'CMG', 'YUM', 'DPZ',
-    
-    # Travel & Hospitality
-    'ABNB', 'BKNG', 'MAR', 'HLT', 'UAL', 'DAL', 'AAL', 'LUV',
-    
-    # Industrial
-    'CAT', 'DE', 'MMM', 'HON', 'UPS', 'FDX',
-    
-    # === PRECIOUS METALS & MINING ===
-    # Gold Miners (Major)
-    'NEM', 'GOLD', 'AEM', 'AU', 'FNV', 'WPM', 'KGC', 'HMY',
-    
-    # Silver Miners
-    'PAAS', 'HL', 'CDE', 'AG', 'EXK',
-    
-    # Diversified Miners
-    'FCX', 'SCCO', 'TECK', 'BHP', 'RIO', 'VALE',
-    
-    # Precious Metal ETFs
-    'GLD', 'SLV', 'GDX', 'GDXJ', 'NUGT', 'JNUG', 'RING', 'GLTR',
-    
-    # Platinum/Palladium
-    'SBSW', 'IMPUY',
-    
-    # === CRYPTO-RELATED ===
-    'MSTR', 'MARA', 'RIOT', 'CLSK', 'CIFR',
+    # Meme / retail favorites (high volume)
+    'GME', 'AMC', 'BB', 'BBBY', 'WISH',
 ]
 
-# RISK MANAGEMENT - OPTIMIZED FOR MORE STOCKS
-MAX_POSITION_SIZE = 500   # $500 per position for better diversification
-MAX_DAILY_LOSS = 2000     # Higher limit for more positions
-MAX_POSITIONS = 15        # Allow 15 positions (increased from 10)
+# Position sizing
+MAX_POSITION_SIZE = 1000  # Max $ per single position
+MAX_POSITIONS = 15        # Max concurrent positions
+MAX_DAILY_LOSS = 500      # Stop trading if daily loss exceeds this
 
-# TIMING - FASTER SCANNING
-CHECK_INTERVAL = 30  # Check every 30 seconds (2x faster!)
+# Risk management
+STOP_LOSS_PCT = 0.02      # 2% stop loss
+TAKE_PROFIT_PCT = 0.05    # 5% take profit
 
-# STRATEGY DESCRIPTIONS:
-#
-# 1. MOMENTUM
-#    - Buys stocks showing strong upward movement with high volume
-#    - Exits when momentum reverses or hits stop loss/take profit
-#    - Best for: Trending markets
-#
-# 2. MEAN_REVERSION
-#    - Buys stocks that have dipped below their average price
-#    - Exits when price returns to average
-#    - Best for: Range-bound markets
-#
-# 3. RSI (Relative Strength Index)
-#    - Buys when RSI < 30 (oversold)
-#    - Exits when RSI > 70 (overbought) or hits stop loss
-#    - Best for: Identifying reversals
-#
-# 4. MA_CROSSOVER (Moving Average Crossover)
-#    - Buys when fast MA crosses above slow MA (golden cross)
-#    - Exits when fast MA crosses below slow MA (death cross)
-#    - Best for: Long-term trends
+# Timing
+CHECK_INTERVAL = 60       # Scan every 60 seconds (aggressive)
 
-# AUTOMATIC STOP LOSS & TAKE PROFIT
-# These are built-in and cannot be disabled:
-# - Stop Loss: Automatically closes position at -2% loss
-# - Take Profit: Automatically closes position at +5% gain
+# Market hours only (optional - set to False for extended hours)
+MARKET_HOURS_ONLY = True
