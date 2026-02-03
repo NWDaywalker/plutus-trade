@@ -2608,135 +2608,527 @@ function App() {
                     </Card>
                   </div>
 
-                  {/* Chart */}
-                  {accountHistory.length > 0 && (
-                    <Card style={{ marginBottom: '24px' }}>
-                      <SectionHeader icon={LineChartIcon} title="Portfolio Performance" />
-                      <div style={{ height: 300 }}>
-                        <ResponsiveContainer width="100%" height="100%">
-                          <AreaChart data={accountHistory}>
-                            <defs>
-                              <linearGradient id="equityGradient" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stopColor={DESIGN.colors.brand.primary} stopOpacity={0.3} />
-                                <stop offset="100%" stopColor={DESIGN.colors.brand.primary} stopOpacity={0} />
-                              </linearGradient>
-                            </defs>
-                            <CartesianGrid 
-                              strokeDasharray="3 3" 
-                              stroke={DESIGN.colors.border.subtle} 
-                              vertical={false}
-                            />
-                            <XAxis 
-                              dataKey="timestamp" 
-                              stroke={DESIGN.colors.text.tertiary}
-                              fontSize={11}
-                              tickFormatter={(v) => new Date(v).toLocaleDateString()}
-                              axisLine={{ stroke: DESIGN.colors.border.subtle }}
-                              tickLine={false}
-                            />
-                            <YAxis 
-                              stroke={DESIGN.colors.text.tertiary}
-                              fontSize={11}
-                              tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`}
-                              axisLine={false}
-                              tickLine={false}
-                            />
-                            <Tooltip 
-                              contentStyle={{
-                                backgroundColor: DESIGN.colors.bg.elevated,
-                                border: `1px solid ${DESIGN.colors.border.default}`,
-                                borderRadius: DESIGN.radius.md,
+                  {/* Portfolio Performance - Sparkline Small Multiples */}
+                  <Card style={{ marginBottom: '24px' }}>
+                    <SectionHeader icon={LineChartIcon} title="Portfolio Performance" />
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(4, 1fr)',
+                      gap: '16px',
+                    }}>
+                      {/* Today */}
+                      <div style={{
+                        padding: '16px',
+                        backgroundColor: DESIGN.colors.bg.surface,
+                        borderRadius: DESIGN.radius.lg,
+                        border: `1px solid ${DESIGN.colors.border.subtle}`,
+                      }}>
+                        <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'flex-start',
+                          marginBottom: '12px',
+                        }}>
+                          <div>
+                            <div style={{
+                              fontSize: DESIGN.typography.size.xs,
+                              color: DESIGN.colors.text.tertiary,
+                              textTransform: 'uppercase',
+                              letterSpacing: DESIGN.typography.letterSpacing.wider,
+                            }}>
+                              Today
+                            </div>
+                            <div style={{
+                              fontSize: DESIGN.typography.size.lg,
+                              fontWeight: DESIGN.typography.weight.bold,
+                              fontFamily: DESIGN.typography.fontFamily.mono,
+                              color: (account.equity - account.last_equity) >= 0 ? DESIGN.colors.semantic.profit : DESIGN.colors.semantic.loss,
+                            }}>
+                              {formatCurrency(account.equity - account.last_equity)}
+                            </div>
+                          </div>
+                          <div style={{
+                            fontSize: DESIGN.typography.size.sm,
+                            fontWeight: DESIGN.typography.weight.semibold,
+                            color: (account.equity - account.last_equity) >= 0 ? DESIGN.colors.semantic.profit : DESIGN.colors.semantic.loss,
+                          }}>
+                            {((account.equity - account.last_equity) / account.last_equity * 100).toFixed(2)}%
+                          </div>
+                        </div>
+                        <div style={{ height: 50 }}>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={accountHistory.slice(-24)}>
+                              <defs>
+                                <linearGradient id="sparkToday" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0%" stopColor={(account.equity - account.last_equity) >= 0 ? DESIGN.colors.semantic.profit : DESIGN.colors.semantic.loss} stopOpacity={0.3} />
+                                  <stop offset="100%" stopColor={(account.equity - account.last_equity) >= 0 ? DESIGN.colors.semantic.profit : DESIGN.colors.semantic.loss} stopOpacity={0} />
+                                </linearGradient>
+                              </defs>
+                              <Area 
+                                type="monotone" 
+                                dataKey="equity" 
+                                stroke={(account.equity - account.last_equity) >= 0 ? DESIGN.colors.semantic.profit : DESIGN.colors.semantic.loss}
+                                strokeWidth={2}
+                                fill="url(#sparkToday)"
+                              />
+                            </AreaChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+
+                      {/* This Week */}
+                      <div style={{
+                        padding: '16px',
+                        backgroundColor: DESIGN.colors.bg.surface,
+                        borderRadius: DESIGN.radius.lg,
+                        border: `1px solid ${DESIGN.colors.border.subtle}`,
+                      }}>
+                        <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'flex-start',
+                          marginBottom: '12px',
+                        }}>
+                          <div>
+                            <div style={{
+                              fontSize: DESIGN.typography.size.xs,
+                              color: DESIGN.colors.text.tertiary,
+                              textTransform: 'uppercase',
+                              letterSpacing: DESIGN.typography.letterSpacing.wider,
+                            }}>
+                              This Week
+                            </div>
+                            <div style={{
+                              fontSize: DESIGN.typography.size.lg,
+                              fontWeight: DESIGN.typography.weight.bold,
+                              fontFamily: DESIGN.typography.fontFamily.mono,
+                              color: (account.equity - 100000) >= 0 ? DESIGN.colors.semantic.profit : DESIGN.colors.semantic.loss,
+                            }}>
+                              {formatCurrency(account.equity - 100000)}
+                            </div>
+                          </div>
+                          <div style={{
+                            fontSize: DESIGN.typography.size.sm,
+                            fontWeight: DESIGN.typography.weight.semibold,
+                            color: (account.equity - 100000) >= 0 ? DESIGN.colors.semantic.profit : DESIGN.colors.semantic.loss,
+                          }}>
+                            {((account.equity - 100000) / 100000 * 100).toFixed(2)}%
+                          </div>
+                        </div>
+                        <div style={{ height: 50 }}>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={accountHistory.slice(-168)}>
+                              <defs>
+                                <linearGradient id="sparkWeek" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0%" stopColor={(account.equity - 100000) >= 0 ? DESIGN.colors.semantic.profit : DESIGN.colors.semantic.loss} stopOpacity={0.3} />
+                                  <stop offset="100%" stopColor={(account.equity - 100000) >= 0 ? DESIGN.colors.semantic.profit : DESIGN.colors.semantic.loss} stopOpacity={0} />
+                                </linearGradient>
+                              </defs>
+                              <Area 
+                                type="monotone" 
+                                dataKey="equity" 
+                                stroke={(account.equity - 100000) >= 0 ? DESIGN.colors.semantic.profit : DESIGN.colors.semantic.loss}
+                                strokeWidth={2}
+                                fill="url(#sparkWeek)"
+                              />
+                            </AreaChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+
+                      {/* This Month */}
+                      <div style={{
+                        padding: '16px',
+                        backgroundColor: DESIGN.colors.bg.surface,
+                        borderRadius: DESIGN.radius.lg,
+                        border: `1px solid ${DESIGN.colors.border.subtle}`,
+                      }}>
+                        <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'flex-start',
+                          marginBottom: '12px',
+                        }}>
+                          <div>
+                            <div style={{
+                              fontSize: DESIGN.typography.size.xs,
+                              color: DESIGN.colors.text.tertiary,
+                              textTransform: 'uppercase',
+                              letterSpacing: DESIGN.typography.letterSpacing.wider,
+                            }}>
+                              This Month
+                            </div>
+                            <div style={{
+                              fontSize: DESIGN.typography.size.lg,
+                              fontWeight: DESIGN.typography.weight.bold,
+                              fontFamily: DESIGN.typography.fontFamily.mono,
+                              color: (account.equity - 100000) >= 0 ? DESIGN.colors.semantic.profit : DESIGN.colors.semantic.loss,
+                            }}>
+                              {formatCurrency(account.equity - 100000)}
+                            </div>
+                          </div>
+                          <div style={{
+                            fontSize: DESIGN.typography.size.sm,
+                            fontWeight: DESIGN.typography.weight.semibold,
+                            color: (account.equity - 100000) >= 0 ? DESIGN.colors.semantic.profit : DESIGN.colors.semantic.loss,
+                          }}>
+                            {((account.equity - 100000) / 100000 * 100).toFixed(2)}%
+                          </div>
+                        </div>
+                        <div style={{ height: 50 }}>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={accountHistory}>
+                              <defs>
+                                <linearGradient id="sparkMonth" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0%" stopColor={(account.equity - 100000) >= 0 ? DESIGN.colors.semantic.profit : DESIGN.colors.semantic.loss} stopOpacity={0.3} />
+                                  <stop offset="100%" stopColor={(account.equity - 100000) >= 0 ? DESIGN.colors.semantic.profit : DESIGN.colors.semantic.loss} stopOpacity={0} />
+                                </linearGradient>
+                              </defs>
+                              <Area 
+                                type="monotone" 
+                                dataKey="equity" 
+                                stroke={(account.equity - 100000) >= 0 ? DESIGN.colors.semantic.profit : DESIGN.colors.semantic.loss}
+                                strokeWidth={2}
+                                fill="url(#sparkMonth)"
+                              />
+                            </AreaChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+
+                      {/* All Time */}
+                      <div style={{
+                        padding: '16px',
+                        backgroundColor: DESIGN.colors.bg.surface,
+                        borderRadius: DESIGN.radius.lg,
+                        border: `1px solid ${DESIGN.colors.border.subtle}`,
+                      }}>
+                        <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'flex-start',
+                          marginBottom: '12px',
+                        }}>
+                          <div>
+                            <div style={{
+                              fontSize: DESIGN.typography.size.xs,
+                              color: DESIGN.colors.text.tertiary,
+                              textTransform: 'uppercase',
+                              letterSpacing: DESIGN.typography.letterSpacing.wider,
+                            }}>
+                              All Time
+                            </div>
+                            <div style={{
+                              fontSize: DESIGN.typography.size.lg,
+                              fontWeight: DESIGN.typography.weight.bold,
+                              fontFamily: DESIGN.typography.fontFamily.mono,
+                              color: (account.equity - 100000) >= 0 ? DESIGN.colors.semantic.profit : DESIGN.colors.semantic.loss,
+                            }}>
+                              {formatCurrency(account.equity - 100000)}
+                            </div>
+                          </div>
+                          <div style={{
+                            fontSize: DESIGN.typography.size.sm,
+                            fontWeight: DESIGN.typography.weight.semibold,
+                            color: (account.equity - 100000) >= 0 ? DESIGN.colors.semantic.profit : DESIGN.colors.semantic.loss,
+                          }}>
+                            {((account.equity - 100000) / 100000 * 100).toFixed(2)}%
+                          </div>
+                        </div>
+                        <div style={{ height: 50 }}>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={accountHistory}>
+                              <defs>
+                                <linearGradient id="sparkAll" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0%" stopColor={(account.equity - 100000) >= 0 ? DESIGN.colors.semantic.profit : DESIGN.colors.semantic.loss} stopOpacity={0.3} />
+                                  <stop offset="100%" stopColor={(account.equity - 100000) >= 0 ? DESIGN.colors.semantic.profit : DESIGN.colors.semantic.loss} stopOpacity={0} />
+                                </linearGradient>
+                              </defs>
+                              <Area 
+                                type="monotone" 
+                                dataKey="equity" 
+                                stroke={(account.equity - 100000) >= 0 ? DESIGN.colors.semantic.profit : DESIGN.colors.semantic.loss}
+                                strokeWidth={2}
+                                fill="url(#sparkAll)"
+                              />
+                            </AreaChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+
+                  {/* Market Analytics */}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(3, 1fr)',
+                    gap: '16px',
+                  }}>
+                    {/* Top Gainers */}
+                    <Card>
+                      <SectionHeader icon={TrendingUp} title="Top Gainers" />
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {[
+                          { symbol: 'NVDA', price: 892.45, change: 8.24 },
+                          { symbol: 'AMD', price: 178.32, change: 5.67 },
+                          { symbol: 'TSLA', price: 248.50, change: 4.32 },
+                          { symbol: 'META', price: 524.18, change: 3.89 },
+                          { symbol: 'AAPL', price: 269.48, change: 2.15 },
+                        ].map((stock, idx) => (
+                          <div key={idx} style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            padding: '10px 12px',
+                            backgroundColor: DESIGN.colors.bg.surface,
+                            borderRadius: DESIGN.radius.md,
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                              <span style={{
+                                fontSize: DESIGN.typography.size.xs,
+                                color: DESIGN.colors.text.tertiary,
+                                width: '16px',
+                              }}>
+                                {idx + 1}
+                              </span>
+                              <span style={{
+                                fontWeight: DESIGN.typography.weight.semibold,
+                                color: DESIGN.colors.brand.primary,
+                              }}>
+                                {stock.symbol}
+                              </span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                              <span style={{
+                                fontFamily: DESIGN.typography.fontFamily.mono,
                                 fontSize: DESIGN.typography.size.sm,
-                              }}
-                              formatter={(v) => [formatCurrency(v), 'Equity']}
-                              labelFormatter={(v) => new Date(v).toLocaleString()}
-                            />
-                            <Area 
-                              type="monotone" 
-                              dataKey="equity" 
-                              stroke={DESIGN.colors.brand.primary}
-                              strokeWidth={2}
-                              fill="url(#equityGradient)"
-                            />
-                          </AreaChart>
-                        </ResponsiveContainer>
+                                color: DESIGN.colors.text.secondary,
+                              }}>
+                                ${stock.price.toFixed(2)}
+                              </span>
+                              <span style={{
+                                fontFamily: DESIGN.typography.fontFamily.mono,
+                                fontSize: DESIGN.typography.size.sm,
+                                fontWeight: DESIGN.typography.weight.semibold,
+                                color: DESIGN.colors.semantic.profit,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '2px',
+                              }}>
+                                <ArrowUpRight size={14} />
+                                +{stock.change.toFixed(2)}%
+                              </span>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </Card>
-                  )}
 
-                  {/* Positions */}
-                  <Card>
-                    <SectionHeader 
-                      icon={TrendingUp} 
-                      title={`Open Positions (${positions.length})`} 
-                    />
-                    {positions.length > 0 ? (
-                      <div style={{ overflowX: 'auto' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                          <thead>
-                            <tr>
-                              {['Symbol', 'Qty', 'Avg Price', 'Current', 'Value', 'P&L', 'P&L %'].map(h => (
-                                <th key={h} style={{
-                                  padding: '12px 16px',
-                                  textAlign: 'left',
-                                  fontSize: DESIGN.typography.size.xs,
-                                  fontWeight: DESIGN.typography.weight.semibold,
-                                  color: DESIGN.colors.text.tertiary,
-                                  textTransform: 'uppercase',
-                                  letterSpacing: DESIGN.typography.letterSpacing.wider,
-                                  borderBottom: `1px solid ${DESIGN.colors.border.subtle}`,
-                                }}>
-                                  {h}
-                                </th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {positions.map((pos, idx) => (
-                              <tr key={idx} style={{
-                                borderBottom: `1px solid ${DESIGN.colors.border.subtle}`,
+                    {/* Top Losers */}
+                    <Card>
+                      <SectionHeader icon={TrendingDown} title="Top Losers" />
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {[
+                          { symbol: 'INTC', price: 42.15, change: -6.32 },
+                          { symbol: 'BA', price: 178.90, change: -4.87 },
+                          { symbol: 'DIS', price: 98.45, change: -3.45 },
+                          { symbol: 'PYPL', price: 62.30, change: -2.98 },
+                          { symbol: 'NKE', price: 94.12, change: -2.21 },
+                        ].map((stock, idx) => (
+                          <div key={idx} style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            padding: '10px 12px',
+                            backgroundColor: DESIGN.colors.bg.surface,
+                            borderRadius: DESIGN.radius.md,
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                              <span style={{
+                                fontSize: DESIGN.typography.size.xs,
+                                color: DESIGN.colors.text.tertiary,
+                                width: '16px',
                               }}>
-                                <td style={{ padding: '16px', fontWeight: DESIGN.typography.weight.semibold, color: DESIGN.colors.brand.primary }}>
-                                  {pos.symbol}
-                                </td>
-                                <td style={{ padding: '16px', fontFamily: DESIGN.typography.fontFamily.mono }}>
-                                  {pos.qty}
-                                </td>
-                                <td style={{ padding: '16px', fontFamily: DESIGN.typography.fontFamily.mono }}>
-                                  {formatCurrency(pos.avg_entry_price)}
-                                </td>
-                                <td style={{ padding: '16px', fontFamily: DESIGN.typography.fontFamily.mono }}>
-                                  {formatCurrency(pos.current_price)}
-                                </td>
-                                <td style={{ padding: '16px', fontFamily: DESIGN.typography.fontFamily.mono }}>
-                                  {formatCurrency(pos.market_value)}
-                                </td>
-                                <td style={{ 
-                                  padding: '16px', 
-                                  fontFamily: DESIGN.typography.fontFamily.mono,
-                                  fontWeight: DESIGN.typography.weight.semibold,
-                                  color: pos.unrealized_pl >= 0 ? DESIGN.colors.semantic.profit : DESIGN.colors.semantic.loss,
-                                }}>
-                                  {formatCurrency(pos.unrealized_pl)}
-                                </td>
-                                <td style={{ padding: '16px' }}>
-                                  <TrendIndicator value={pos.unrealized_plpc * 100} />
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                                {idx + 1}
+                              </span>
+                              <span style={{
+                                fontWeight: DESIGN.typography.weight.semibold,
+                                color: DESIGN.colors.brand.primary,
+                              }}>
+                                {stock.symbol}
+                              </span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                              <span style={{
+                                fontFamily: DESIGN.typography.fontFamily.mono,
+                                fontSize: DESIGN.typography.size.sm,
+                                color: DESIGN.colors.text.secondary,
+                              }}>
+                                ${stock.price.toFixed(2)}
+                              </span>
+                              <span style={{
+                                fontFamily: DESIGN.typography.fontFamily.mono,
+                                fontSize: DESIGN.typography.size.sm,
+                                fontWeight: DESIGN.typography.weight.semibold,
+                                color: DESIGN.colors.semantic.loss,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '2px',
+                              }}>
+                                <ArrowDownRight size={14} />
+                                {stock.change.toFixed(2)}%
+                              </span>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    ) : (
-                      <div style={{
-                        textAlign: 'center',
-                        padding: '40px',
-                        color: DESIGN.colors.text.tertiary,
-                      }}>
-                        No open positions
+                    </Card>
+
+                    {/* Market Overview */}
+                    <Card>
+                      <SectionHeader icon={BarChart3} title="Market Overview" />
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        {/* Major Indices */}
+                        {[
+                          { name: 'S&P 500', value: '5,892.45', change: 0.87 },
+                          { name: 'NASDAQ', value: '18,924.32', change: 1.24 },
+                          { name: 'DOW', value: '43,156.78', change: 0.45 },
+                        ].map((index, idx) => (
+                          <div key={idx} style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            padding: '10px 12px',
+                            backgroundColor: DESIGN.colors.bg.surface,
+                            borderRadius: DESIGN.radius.md,
+                          }}>
+                            <span style={{
+                              fontSize: DESIGN.typography.size.sm,
+                              color: DESIGN.colors.text.secondary,
+                            }}>
+                              {index.name}
+                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                              <span style={{
+                                fontFamily: DESIGN.typography.fontFamily.mono,
+                                fontSize: DESIGN.typography.size.sm,
+                                color: DESIGN.colors.text.primary,
+                              }}>
+                                {index.value}
+                              </span>
+                              <span style={{
+                                fontFamily: DESIGN.typography.fontFamily.mono,
+                                fontSize: DESIGN.typography.size.xs,
+                                fontWeight: DESIGN.typography.weight.semibold,
+                                color: index.change >= 0 ? DESIGN.colors.semantic.profit : DESIGN.colors.semantic.loss,
+                              }}>
+                                {index.change >= 0 ? '+' : ''}{index.change.toFixed(2)}%
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+
+                        {/* Divider */}
+                        <div style={{ 
+                          height: '1px', 
+                          backgroundColor: DESIGN.colors.border.subtle,
+                          margin: '4px 0',
+                        }} />
+
+                        {/* Volume & Stats */}
+                        <div style={{
+                          display: 'grid',
+                          gridTemplateColumns: '1fr 1fr',
+                          gap: '12px',
+                        }}>
+                          <div style={{
+                            padding: '12px',
+                            backgroundColor: DESIGN.colors.bg.surface,
+                            borderRadius: DESIGN.radius.md,
+                            textAlign: 'center',
+                          }}>
+                            <div style={{
+                              fontSize: DESIGN.typography.size.xs,
+                              color: DESIGN.colors.text.tertiary,
+                              marginBottom: '4px',
+                            }}>
+                              Market Volume
+                            </div>
+                            <div style={{
+                              fontSize: DESIGN.typography.size.base,
+                              fontWeight: DESIGN.typography.weight.bold,
+                              fontFamily: DESIGN.typography.fontFamily.mono,
+                              color: DESIGN.colors.text.primary,
+                            }}>
+                              12.4B
+                            </div>
+                          </div>
+                          <div style={{
+                            padding: '12px',
+                            backgroundColor: DESIGN.colors.bg.surface,
+                            borderRadius: DESIGN.radius.md,
+                            textAlign: 'center',
+                          }}>
+                            <div style={{
+                              fontSize: DESIGN.typography.size.xs,
+                              color: DESIGN.colors.text.tertiary,
+                              marginBottom: '4px',
+                            }}>
+                              Advancers/Decliners
+                            </div>
+                            <div style={{
+                              fontSize: DESIGN.typography.size.base,
+                              fontWeight: DESIGN.typography.weight.bold,
+                              fontFamily: DESIGN.typography.fontFamily.mono,
+                            }}>
+                              <span style={{ color: DESIGN.colors.semantic.profit }}>2,847</span>
+                              <span style={{ color: DESIGN.colors.text.tertiary }}> / </span>
+                              <span style={{ color: DESIGN.colors.semantic.loss }}>1,453</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* VIX */}
+                        <div style={{
+                          padding: '12px',
+                          backgroundColor: DESIGN.colors.bg.surface,
+                          borderRadius: DESIGN.radius.md,
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                        }}>
+                          <span style={{
+                            fontSize: DESIGN.typography.size.sm,
+                            color: DESIGN.colors.text.secondary,
+                          }}>
+                            VIX (Fear Index)
+                          </span>
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                          }}>
+                            <span style={{
+                              fontFamily: DESIGN.typography.fontFamily.mono,
+                              fontWeight: DESIGN.typography.weight.bold,
+                              color: DESIGN.colors.semantic.profit,
+                            }}>
+                              14.32
+                            </span>
+                            <span style={{
+                              fontSize: DESIGN.typography.size.xs,
+                              padding: '2px 6px',
+                              backgroundColor: DESIGN.colors.semantic.profitBg,
+                              color: DESIGN.colors.semantic.profit,
+                              borderRadius: DESIGN.radius.sm,
+                            }}>
+                              Low Fear
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                    )}
-                  </Card>
+                    </Card>
+                  </div>
                 </div>
               )}
 
