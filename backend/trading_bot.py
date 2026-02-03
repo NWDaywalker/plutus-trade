@@ -22,6 +22,9 @@ class TradingBot:
         self.running = False
         self.thread = None
         
+        # Strategy (for status endpoint compatibility)
+        self.strategy = config.get('strategy', 'all')
+        
         # Strategy allocations (percentages)
         self.allocations = config.get('allocations', {
             'momentum': 25,
@@ -46,6 +49,9 @@ class TradingBot:
         self.daily_pnl = 0
         self.start_equity = None
         self.last_scan_time = None
+        self.win_rate = 0
+        self.wins = 0
+        self.losses = 0
         
         print(f"🤖 TradingBot initialized")
         print(f"   Symbols: {len(self.symbols)}")
@@ -408,8 +414,10 @@ class TradingBot:
         """Get current bot status"""
         return {
             'running': self.running,
+            'strategy': self.strategy,
             'trades_today': self.trades_today,
             'daily_pnl': self.daily_pnl,
+            'win_rate': self.win_rate,
             'last_scan': self.last_scan_time.isoformat() if self.last_scan_time else None,
             'allocations': self.allocations
         }
