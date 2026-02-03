@@ -25,6 +25,12 @@ orchestrator = None
 monitoring_thread = None
 monitoring_running = False
 
+# Background collection state
+collection_thread = None
+collection_running = False
+collection_result = None
+collection_started_at = None
+
 
 def get_orchestrator():
     global orchestrator
@@ -43,6 +49,7 @@ def research_health():
     return jsonify({
         'status': 'healthy',
         'monitoring_active': monitoring_running,
+        'collection_running': collection_running,
         'database': 'connected',
         'timestamp': datetime.now(timezone.utc).isoformat()
     })
@@ -52,6 +59,9 @@ def research_health():
 def get_stats():
     """Get overall research statistics"""
     stats = research_db.get_research_stats()
+    stats['collection_running'] = collection_running
+    if collection_started_at:
+        stats['collection_started_at'] = collection_started_at
     return jsonify(stats)
 
 
@@ -169,23 +179,69 @@ def generate_signals():
 # COLLECTION CONTROL ENDPOINTS
 # ============================================================
 
-@research_bp.route('/collect', methods=['POST'])
-def trigger_collection():
-    """Manually trigger a collection run"""
-    def run_async():
+def run_collection_background():
+    """Run collection in background thread"""
+    global collection_running, collection_result
+    
+    collection_running = True
+    collection_result = None
+    
+    try:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         orch = get_orchestrator()
         result = loop.run_until_complete(orch.run_collection())
+        
+        # Also generate signals after collection
+        print("\n📊 Generating Signals...")
+        signals = orch.generate_all_signals()
+        result['signals_generated'] = len(signals)
+        
+        collection_result = result
         loop.close()
-        return result
+        print(f"\n✅ Background collection complete!")
+        
+    except Exception as e:
+        print(f"\n❌ Collection error: {e}")
+        collection_result = {'error': str(e)}
+    finally:
+        collection_running = False
+
+
+@research_bp.route('/collect', methods=['POST'])
+def trigger_collection():
+    """
+    Trigger a collection run in the background.
+    Returns immediately - check /collect/status for progress.
+    """
+    global collection_thread, collection_running, collection_started_at
     
-    # Run in a thread to not block
-    result = run_async()
+    if collection_running:
+        return jsonify({
+            'status': 'already_running',
+            'message': 'Collection is already in progress',
+            'started_at': collection_started_at
+        })
+    
+    collection_started_at = datetime.now(timezone.utc).isoformat()
+    collection_thread = threading.Thread(target=run_collection_background, daemon=True)
+    collection_thread.start()
     
     return jsonify({
-        'status': 'collection_complete',
-        'results': result
+        'status': 'started',
+        'message': 'Collection started in background. Check /collect/status for progress.',
+        'started_at': collection_started_at
+    })
+
+
+@research_bp.route('/collect/status', methods=['GET'])
+def collection_status():
+    """Check the status of background collection"""
+    return jsonify({
+        'running': collection_running,
+        'started_at': collection_started_at,
+        'result': collection_result,
+        'timestamp': datetime.now(timezone.utc).isoformat()
     })
 
 
@@ -255,33 +311,6 @@ def get_dashboard():
         'signals': all_signals,
         'categories': summaries,
         'monitoring_active': monitoring_running,
+        'collection_running': collection_running,
         'timestamp': datetime.now(timezone.utc).isoformat()
     })
-
-
-# ============================================================
-# HOW TO INTEGRATE WITH YOUR EXISTING app.py
-# ============================================================
-"""
-Add these lines to your existing backend/app.py:
-
-1. At the top with other imports:
-   from research_api import research_bp
-
-2. After creating the Flask app (after CORS(app)):
-   app.register_blueprint(research_bp)
-
-That's it! Your existing endpoints stay the same, and you get
-all the research endpoints under /api/research/
-
-Example endpoints you'll have:
-- GET  /api/research/health      - Health check
-- GET  /api/research/stats       - Statistics
-- GET  /api/research/items       - All research items
-- GET  /api/research/items/crypto - Crypto-specific items
-- GET  /api/research/signals     - All signals
-- GET  /api/research/signals/politics - Politics signal
-- POST /api/research/collect     - Trigger collection
-- POST /api/research/monitor/start - Start continuous monitoring
-- GET  /api/research/dashboard   - Full dashboard data
-"""
