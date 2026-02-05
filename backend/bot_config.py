@@ -1,5 +1,6 @@
 """
 Bot Configuration - Aggressive Trading Settings
+UPDATED: Added MARKET_HOURS_ONLY to config dict passed to bot
 """
 
 # Active strategy (can be: momentum, mean_reversion, rsi, vwap, or 'all' for multi-strategy)
@@ -56,7 +57,7 @@ STOP_LOSS_PCT = 0.02      # 2% stop loss
 TAKE_PROFIT_PCT = 0.05    # 5% take profit
 
 # Timing
-CHECK_INTERVAL = 60       # Scan every 60 seconds (aggressive)
+CHECK_INTERVAL = 60       # Scan every 60 seconds
 
-# Market hours only (optional - set to False for extended hours)
-MARKET_HOURS_ONLY = True
+# Market hours (set False to enable extended hours 4am-8pm ET)
+MARKET_HOURS_ONLY = False  # Changed to False for more trading opportunities
