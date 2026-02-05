@@ -1,6 +1,8 @@
 """
 Trading Bot - Aggressive multi-strategy automated trading
 Executes actual trades via Alpaca API
+
+UPDATED: 5-minute bars, relaxed thresholds, market hours enforcement
 """
 
 import time
@@ -35,14 +37,17 @@ class TradingBot:
         
         # Trading parameters
         self.symbols = config.get('symbols', [])
-        self.max_position_size = config.get('max_position_size', 1000)  # Max $ per position
+        self.max_position_size = config.get('max_position_size', 1000)
         self.max_positions = config.get('max_positions', 10)
         self.max_daily_loss = config.get('max_daily_loss', 500)
-        self.check_interval = config.get('check_interval', 60)  # seconds
+        self.check_interval = config.get('check_interval', 60)
+        
+        # Market hours setting
+        self.market_hours_only = config.get('market_hours_only', True)
         
         # Risk management
-        self.stop_loss_pct = config.get('stop_loss_pct', 0.02)  # 2%
-        self.take_profit_pct = config.get('take_profit_pct', 0.05)  # 5%
+        self.stop_loss_pct = config.get('stop_loss_pct', 0.02)
+        self.take_profit_pct = config.get('take_profit_pct', 0.05)
         
         # Tracking
         self.trades_today = 0
@@ -52,13 +57,16 @@ class TradingBot:
         self.win_rate = 0
         self.wins = 0
         self.losses = 0
+        self.signals_found = 0
         
         print(f"🤖 TradingBot initialized")
         print(f"   Symbols: {len(self.symbols)}")
         print(f"   Max position: ${self.max_position_size}")
         print(f"   Max positions: {self.max_positions}")
         print(f"   Check interval: {self.check_interval}s")
+        print(f"   Market hours only: {self.market_hours_only}")
         print(f"   Allocations: {self.allocations}")
+        print(f"   Using 5-minute bars with relaxed thresholds")
     
     def start(self):
         """Start the trading bot main loop"""
@@ -72,16 +80,38 @@ class TradingBot:
                 time.sleep(self.check_interval)
             except Exception as e:
                 print(f"❌ Trading cycle error: {e}")
-                time.sleep(5)  # Brief pause on error
+                time.sleep(5)
     
     def stop(self):
         """Stop the trading bot"""
         self.running = False
         print("🛑 Trading bot stopped")
     
+    def _is_market_open(self) -> bool:
+        """Check if market is open (or extended hours if enabled)"""
+        try:
+            clock = self.broker.api.get_clock()
+            
+            if self.market_hours_only:
+                return clock.is_open
+            else:
+                # Extended hours: 4am - 8pm ET
+                now = datetime.now()
+                hour = now.hour
+                # Rough check - 4am to 8pm ET (adjust for your timezone)
+                return 4 <= hour <= 20
+        except Exception as e:
+            print(f"⚠️ Could not check market hours: {e}")
+            return True  # Default to running
+    
     def _trading_cycle(self):
         """Main trading cycle - scan and execute"""
         self.last_scan_time = datetime.now()
+        
+        # Check market hours
+        if not self._is_market_open():
+            print(f"💤 Market closed. Waiting... ({datetime.now().strftime('%H:%M:%S')})")
+            return
         
         # Check daily loss limit
         current_equity = self._get_current_equity()
@@ -101,50 +131,55 @@ class TradingBot:
             self._manage_existing_positions(positions)
             return
         
-        # Scan for opportunities with each active strategy
+        # Scan for opportunities
         print(f"\n🔍 Scanning {len(self.symbols)} symbols... ({datetime.now().strftime('%H:%M:%S')})")
         
         opportunities = []
         symbols_with_data = 0
         symbols_without_data = 0
+        strategy_hits = {'momentum': 0, 'mean_reversion': 0, 'rsi': 0, 'vwap': 0}
         
         for symbol in self.symbols:
             # Skip if we already have a position
             if any(p['symbol'] == symbol for p in positions):
                 continue
             
-            # Get market data
-            bars = self._get_bars(symbol, limit=50)
+            # Get market data - NOW USING 5-MINUTE BARS
+            bars = self._get_bars(symbol, limit=100)
             if not bars or len(bars) < 20:
                 symbols_without_data += 1
                 continue
             
             symbols_with_data += 1
             
-            # Run each strategy
+            # Run each strategy with RELAXED thresholds
             if self.allocations.get('momentum', 0) > 0:
                 signal = self._momentum_strategy(symbol, bars)
                 if signal:
                     signal['strategy'] = 'momentum'
                     opportunities.append(signal)
+                    strategy_hits['momentum'] += 1
             
             if self.allocations.get('mean_reversion', 0) > 0:
                 signal = self._mean_reversion_strategy(symbol, bars)
                 if signal:
                     signal['strategy'] = 'mean_reversion'
                     opportunities.append(signal)
+                    strategy_hits['mean_reversion'] += 1
             
             if self.allocations.get('rsi', 0) > 0:
                 signal = self._rsi_strategy(symbol, bars)
                 if signal:
                     signal['strategy'] = 'rsi'
                     opportunities.append(signal)
+                    strategy_hits['rsi'] += 1
             
             if self.allocations.get('vwap', 0) > 0:
                 signal = self._vwap_strategy(symbol, bars)
                 if signal:
                     signal['strategy'] = 'vwap'
                     opportunities.append(signal)
+                    strategy_hits['vwap'] += 1
         
         # Sort by signal strength and execute top opportunities
         opportunities.sort(key=lambda x: x.get('strength', 0), reverse=True)
@@ -152,19 +187,22 @@ class TradingBot:
         slots_available = self.max_positions - current_position_count
         to_execute = opportunities[:slots_available]
         
-        print(f"   Symbols with data: {symbols_with_data}, without: {symbols_without_data}")
-        print(f"   Found {len(opportunities)} opportunities, executing top {len(to_execute)}")
+        self.signals_found = len(opportunities)
+        
+        print(f"   📊 Data: {symbols_with_data} symbols, {symbols_without_data} skipped")
+        print(f"   📈 Signals: {strategy_hits}")
+        print(f"   🎯 Total opportunities: {len(opportunities)}, executing top {len(to_execute)}")
         
         for opp in to_execute:
             self._execute_trade(opp)
         
-        # Manage existing positions (check stop loss / take profit)
+        # Manage existing positions
         self._manage_existing_positions(positions)
     
-    def _get_bars(self, symbol: str, limit: int = 50) -> List[Dict]:
-        """Get recent price bars for a symbol"""
+    def _get_bars(self, symbol: str, limit: int = 100) -> List[Dict]:
+        """Get recent price bars - USING 5-MINUTE TIMEFRAME"""
         try:
-            return self.broker.get_bars(symbol, timeframe='1Hour', limit=limit)
+            return self.broker.get_bars(symbol, timeframe='5Min', limit=limit)
         except Exception as e:
             return None
     
@@ -177,13 +215,13 @@ class TradingBot:
             return 0
     
     # ═══════════════════════════════════════════════════════════════════════════
-    # STRATEGIES
+    # STRATEGIES - RELAXED THRESHOLDS FOR MORE SIGNALS
     # ═══════════════════════════════════════════════════════════════════════════
     
     def _momentum_strategy(self, symbol: str, bars: List[Dict]) -> Optional[Dict]:
         """
         Momentum Breakout Strategy
-        Buy when price breaks above 20-period high with volume confirmation
+        RELAXED: 98% of 20-period high, 1.1x volume (was 99%, 1.2x)
         """
         if len(bars) < 20:
             return None
@@ -196,15 +234,15 @@ class TradingBot:
         avg_volume = sum(volumes[-20:]) / 20
         current_volume = volumes[-1]
         
-        # Breakout condition: price at/near 20-day high with above-average volume
-        if current_price >= high_20 * 0.99 and current_volume > avg_volume * 1.2:
+        # RELAXED: 98% of high, 1.1x volume
+        if current_price >= high_20 * 0.98 and current_volume > avg_volume * 1.1:
             strength = (current_volume / avg_volume) * (current_price / high_20)
             return {
                 'symbol': symbol,
                 'side': 'buy',
                 'price': current_price,
                 'strength': strength,
-                'reason': f'Breakout above 20-period high (${high_20:.2f}) with {current_volume/avg_volume:.1f}x volume'
+                'reason': f'Breakout near 20-bar high (${high_20:.2f}) with {current_volume/avg_volume:.1f}x vol'
             }
         
         return None
@@ -212,7 +250,7 @@ class TradingBot:
     def _mean_reversion_strategy(self, symbol: str, bars: List[Dict]) -> Optional[Dict]:
         """
         Mean Reversion Strategy
-        Buy when price is significantly below moving average, expecting bounce
+        RELAXED: 1.5% below SMA (was 2%)
         """
         if len(bars) < 20:
             return None
@@ -222,18 +260,17 @@ class TradingBot:
         current_price = closes[-1]
         sma_20 = sum(closes[-20:]) / 20
         
-        # Calculate how far below the MA we are
         deviation = (current_price - sma_20) / sma_20
         
-        # Buy if price is 2%+ below 20-day MA (more aggressive)
-        if deviation < -0.02:
-            strength = abs(deviation) * 10  # Higher deviation = stronger signal
+        # RELAXED: 1.5% below (was 2%)
+        if deviation < -0.015:
+            strength = abs(deviation) * 10
             return {
                 'symbol': symbol,
                 'side': 'buy',
                 'price': current_price,
                 'strength': strength,
-                'reason': f'Price {abs(deviation)*100:.1f}% below 20-SMA (${sma_20:.2f}), expecting reversion'
+                'reason': f'Price {abs(deviation)*100:.1f}% below 20-SMA (${sma_20:.2f})'
             }
         
         return None
@@ -241,14 +278,12 @@ class TradingBot:
     def _rsi_strategy(self, symbol: str, bars: List[Dict]) -> Optional[Dict]:
         """
         RSI Oversold Strategy
-        Buy when RSI drops below 35 (oversold)
+        RELAXED: RSI < 40 (was 35)
         """
         if len(bars) < 15:
             return None
         
         closes = [b['close'] for b in bars]
-        
-        # Calculate RSI
         rsi = self._calculate_rsi(closes, period=14)
         
         if rsi is None:
@@ -256,9 +291,9 @@ class TradingBot:
         
         current_price = closes[-1]
         
-        # Buy if RSI is oversold (below 35 - more aggressive)
-        if rsi < 35:
-            strength = (35 - rsi) / 10  # Lower RSI = stronger signal
+        # RELAXED: RSI < 40 (was 35)
+        if rsi < 40:
+            strength = (40 - rsi) / 10
             return {
                 'symbol': symbol,
                 'side': 'buy',
@@ -272,16 +307,16 @@ class TradingBot:
     def _vwap_strategy(self, symbol: str, bars: List[Dict]) -> Optional[Dict]:
         """
         VWAP Bounce Strategy
-        Buy when price is at or below VWAP
+        RELAXED: Price <= VWAP * 1.02 (was 1.01), using 20 bars (was 10)
         """
-        if len(bars) < 10:
+        if len(bars) < 20:
             return None
         
-        # Calculate VWAP (simplified - using available bars)
+        # Calculate VWAP using more bars
         total_volume = 0
-        total_vp = 0  # volume * price
+        total_vp = 0
         
-        for bar in bars[-10:]:
+        for bar in bars[-20:]:  # INCREASED from 10 to 20 bars
             typical_price = (bar['high'] + bar['low'] + bar['close']) / 3
             total_vp += typical_price * bar['volume']
             total_volume += bar['volume']
@@ -292,16 +327,16 @@ class TradingBot:
         vwap = total_vp / total_volume
         current_price = bars[-1]['close']
         
-        # Buy if price is at or up to 1% above VWAP (more aggressive)
-        if current_price <= vwap * 1.01:
+        # RELAXED: 2% above VWAP (was 1%)
+        if current_price <= vwap * 1.02:
             deviation = (vwap - current_price) / vwap
-            strength = max(0.5, deviation * 20 + 0.3)
+            strength = max(0.5, deviation * 15 + 0.4)
             return {
                 'symbol': symbol,
                 'side': 'buy',
                 'price': current_price,
                 'strength': strength,
-                'reason': f'Price near VWAP support (${vwap:.2f})'
+                'reason': f'Price near VWAP (${vwap:.2f})'
             }
         
         return None
@@ -400,11 +435,17 @@ class TradingBot:
             if unrealized_pnl_pct <= -self.stop_loss_pct:
                 print(f"\n   🛑 STOP LOSS: {symbol} at {unrealized_pnl_pct*100:.1f}%")
                 self._close_position(symbol, qty, 'stop_loss')
+                self.losses += 1
             
             # Check take profit
             elif unrealized_pnl_pct >= self.take_profit_pct:
                 print(f"\n   🎯 TAKE PROFIT: {symbol} at +{unrealized_pnl_pct*100:.1f}%")
                 self._close_position(symbol, qty, 'take_profit')
+                self.wins += 1
+        
+        # Update win rate
+        total = self.wins + self.losses
+        self.win_rate = (self.wins / total * 100) if total > 0 else 0
     
     def _close_position(self, symbol: str, qty: float, reason: str):
         """Close a position"""
@@ -424,6 +465,10 @@ class TradingBot:
             'trades_today': self.trades_today,
             'daily_pnl': self.daily_pnl,
             'win_rate': self.win_rate,
+            'wins': self.wins,
+            'losses': self.losses,
+            'signals_found': self.signals_found,
             'last_scan': self.last_scan_time.isoformat() if self.last_scan_time else None,
-            'allocations': self.allocations
+            'allocations': self.allocations,
+            'market_hours_only': self.market_hours_only
         }
